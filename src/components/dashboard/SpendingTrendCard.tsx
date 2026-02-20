@@ -40,6 +40,7 @@ const SpendingTrendCard = () => {
               axisLine={false}
               tickLine={false}
               tick={{ fill: "hsl(220 4% 67%)", fontSize: 11 }}
+              interval={0}
             />
             <Tooltip
               contentStyle={{

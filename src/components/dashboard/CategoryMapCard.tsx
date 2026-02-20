@@ -1,25 +1,53 @@
+import { useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
-const data = [
-  { name: "Food & Dining", value: 850, color: "hsl(8 100% 67%)" },
-  { name: "Transport", value: 420, color: "hsl(237 100% 72%)" },
-  { name: "Entertainment", value: 320, color: "hsl(258 100% 71%)" },
-  { name: "Shopping", value: 580, color: "hsl(40 90% 64%)" },
-  { name: "Bills", value: 640, color: "hsl(195 30% 74%)" },
-  { name: "Other", value: 290, color: "hsl(144 12% 82%)" },
+const expenseData = [
+  { name: "Education", value: 320, color: "hsl(237 100% 72%)" },
+  { name: "Entertainment", value: 280, color: "hsl(258 100% 71%)" },
+  { name: "Food", value: 850, color: "hsl(8 100% 67%)" },
+  { name: "Friends", value: 190, color: "hsl(40 90% 64%)" },
+  { name: "Health", value: 420, color: "hsl(144 12% 82%)" },
+  { name: "Personal", value: 340, color: "hsl(195 30% 74%)" },
+  { name: "Others", value: 290, color: "hsl(220 4% 67%)" },
+];
+
+const incomeData = [
+  { name: "Income", value: 5200, color: "hsl(40 90% 64%)" },
+  { name: "Others", value: 720, color: "hsl(195 30% 74%)" },
 ];
 
 const CategoryMapCard = () => {
+  const [mode, setMode] = useState<"expense" | "income">("expense");
+  const data = mode === "expense" ? expenseData : incomeData;
+
   return (
     <div className="glass-card card-glow-blue p-6 animate-fade-up-delay-3">
       <div className="flex items-start justify-between mb-4">
         <div>
           <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Category Map</p>
         </div>
-        <span className="chip">
-          <span className="h-1.5 w-1.5 rounded-full bg-soft-blue" />
-          This month
-        </span>
+        <div className="flex rounded-full bg-muted p-0.5">
+          <button
+            onClick={() => setMode("expense")}
+            className={`px-3 py-1 text-[11px] font-medium rounded-full transition-colors ${
+              mode === "expense"
+                ? "bg-coral text-white"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Expense
+          </button>
+          <button
+            onClick={() => setMode("income")}
+            className={`px-3 py-1 text-[11px] font-medium rounded-full transition-colors ${
+              mode === "income"
+                ? "bg-yellow text-background"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Income
+          </button>
+        </div>
       </div>
 
       <div className="h-40 flex items-center justify-center">
