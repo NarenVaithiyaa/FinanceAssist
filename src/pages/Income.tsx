@@ -1,20 +1,67 @@
+import { useState } from "react";
 import Layout from "@/components/Layout";
-import { TrendingUp, Briefcase, Gift, Landmark, ArrowUpRight } from "lucide-react";
+import { TrendingUp, Briefcase, Gift, Landmark, ArrowUpRight, Plus, Filter, Search, MoreHorizontal, CalendarIcon } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
-const incomes = [
-  { id: 1, title: "Salary", source: "Company Inc.", amount: 4500, date: "1st Feb", icon: Briefcase, growth: "+3.2%" },
-  { id: 2, title: "Freelance Project", source: "Client A", amount: 1200, date: "5th Feb", icon: Landmark, growth: "+15%" },
-  { id: 3, title: "Dividends", source: "Investment", amount: 340, date: "10th Feb", icon: TrendingUp, growth: "+2.1%" },
-  { id: 4, title: "Gift", source: "Family", amount: 200, date: "14th Feb", icon: Gift, growth: null },
-  { id: 5, title: "Side Project", source: "App Revenue", amount: 680, date: "18th Feb", icon: Landmark, growth: "+28%" },
+type IncomeCategory = "Income" | "Others";
+const allCategories: IncomeCategory[] = ["Income", "Others"];
+
+const categoryIcons: Record<IncomeCategory, typeof Briefcase> = {
+  Income: Briefcase,
+  Others: MoreHorizontal,
+};
+
+const initialIncomes = [
+  { id: 1, title: "Salary", category: "Income" as IncomeCategory, amount: 4500, date: "1st Feb", destination: "Bank account", description: "Company Inc.", growth: "+3.2%" },
+  { id: 2, title: "Freelance Project", category: "Income" as IncomeCategory, amount: 1200, date: "5th Feb", destination: "Bank account", description: "Client A", growth: "+15%" },
+  { id: 3, title: "Dividends", category: "Others" as IncomeCategory, amount: 340, date: "10th Feb", destination: "Bank account", description: "Investment", growth: "+2.1%" },
+  { id: 4, title: "Gift", category: "Others" as IncomeCategory, amount: 200, date: "14th Feb", destination: "Wallet", description: "Family", growth: null },
+  { id: 5, title: "Side Project", category: "Income" as IncomeCategory, amount: 680, date: "18th Feb", destination: "Bank account", description: "App Revenue", growth: "+28%" },
 ];
 
 const Income = () => {
-  const total = incomes.reduce((s, i) => s + i.amount, 0);
+  const [incomes, setIncomes] = useState(initialIncomes);
+  const [open, setOpen] = useState(false);
+  const [filterCategory, setFilterCategory] = useState<IncomeCategory | "All">("All");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState<IncomeCategory>("Income");
+  const [destination, setDestination] = useState("Bank account");
+  const [description, setDescription] = useState("");
+  const [date, setDate] = useState<Date | undefined>(new Date());
+
+  const filtered = filterCategory === "All" ? incomes : incomes.filter((i) => i.category === filterCategory);
+  const total = filtered.reduce((s, i) => s + i.amount, 0);
+
+  const handleAdd = () => {
+    if (!amount || !date) return;
+    const newInc = {
+      id: Date.now(),
+      title: description || category,
+      category,
+      amount: parseFloat(amount),
+      date: format(date, "PPP"),
+      destination,
+      description,
+      growth: null as string | null,
+    };
+    setIncomes([newInc, ...incomes]);
+    setOpen(false);
+    setAmount("");
+    setDescription("");
+    setDate(new Date());
+  };
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto relative pb-20">
         <div className="mb-6">
           <h1 className="text-2xl md:text-3xl font-heading font-bold uppercase tracking-wider text-foreground">Income</h1>
           <p className="text-sm text-muted-foreground mt-1">Track your earnings and revenue streams</p>
@@ -28,31 +75,114 @@ const Income = () => {
           </p>
         </div>
 
-        <div className="space-y-3">
-          {incomes.map((inc, i) => (
-            <div
-              key={inc.id}
-              className="glass-card p-4 flex items-center gap-4 animate-fade-up"
-              style={{ animationDelay: `${i * 0.05}s` }}
-            >
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-yellow/20">
-                <inc.icon className="h-5 w-5 text-yellow" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground">{inc.title}</p>
-                <p className="text-xs text-muted-foreground">{inc.source} · {inc.date}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-foreground">+${inc.amount.toLocaleString()}</p>
-                {inc.growth && (
-                  <span className="inline-flex items-center rounded-full bg-yellow/10 px-2 py-0.5 text-[10px] font-medium text-yellow">
-                    {inc.growth}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+        {/* Filter */}
+        <div className="flex gap-3 mb-6">
+          <Select value={filterCategory} onValueChange={(v) => setFilterCategory(v as IncomeCategory | "All")}>
+            <SelectTrigger className="w-auto rounded-full bg-muted border-none gap-2 px-4">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All</SelectItem>
+              {allCategories.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+
+        <div className="space-y-3">
+          {filtered.map((inc, i) => {
+            const Icon = categoryIcons[inc.category];
+            return (
+              <div
+                key={inc.id}
+                className="glass-card p-4 flex items-center gap-4 animate-fade-up"
+                style={{ animationDelay: `${i * 0.05}s` }}
+              >
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-yellow/20">
+                  <Icon className="h-5 w-5 text-yellow" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{inc.title}</p>
+                  <p className="text-xs text-muted-foreground">{inc.description} · {inc.date}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-foreground">+${inc.amount.toLocaleString()}</p>
+                  {inc.growth && (
+                    <span className="inline-flex items-center rounded-full bg-yellow/10 px-2 py-0.5 text-[10px] font-medium text-yellow">
+                      {inc.growth}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Floating Add Button */}
+        <button
+          onClick={() => setOpen(true)}
+          className="fixed bottom-24 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full bg-yellow text-background flex items-center justify-center shadow-lg hover:scale-105 transition-transform btn-press z-50"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+
+        {/* Add Income Dialog */}
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="glass-card border-border">
+            <DialogHeader>
+              <DialogTitle className="font-heading uppercase tracking-wider">Add Income</DialogTitle>
+              <DialogDescription>Enter income details below.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-2">
+              <div>
+                <Label>Amount</Label>
+                <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1" />
+              </div>
+              <div>
+                <Label>Category</Label>
+                <Select value={category} onValueChange={(v) => setCategory(v as IncomeCategory)}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {allCategories.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Destination</Label>
+                <Select value={destination} onValueChange={setDestination}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Bank account">Bank account</SelectItem>
+                    <SelectItem value="Wallet">Wallet</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Description (optional)</Label>
+                <Input placeholder="e.g. Monthly salary" value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" />
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-full mt-1 justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {date ? format(date, "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={date} onSelect={setDate} initialFocus className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <Button onClick={handleAdd} className="w-full bg-yellow hover:bg-yellow/90 text-background">Add Income</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
