@@ -133,7 +133,7 @@ const Expenses = () => {
 
         {/* Add Expense Dialog */}
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="glass-card border-border">
+          <DialogContent className="glass-card border-border" onPointerDownOutside={(e) => e.preventDefault()}>
             <DialogHeader>
               <DialogTitle className="font-heading uppercase tracking-wider">Add Expense</DialogTitle>
               <DialogDescription>Enter expense details below.</DialogDescription>
@@ -170,14 +170,14 @@ const Expenses = () => {
               </div>
               <div>
                 <Label>Date</Label>
-                <Popover>
+                <Popover modal={true}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className={cn("w-full mt-1 justify-start text-left font-normal", !date && "text-muted-foreground")}>
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {date ? format(date, "PPP") : "Pick a date"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
+                  <PopoverContent className="w-auto p-0 z-[60]" align="start">
                     <Calendar mode="single" selected={date} onSelect={setDate} initialFocus className="p-3 pointer-events-auto" />
                   </PopoverContent>
                 </Popover>
