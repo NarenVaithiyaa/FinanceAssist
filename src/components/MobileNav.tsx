@@ -1,4 +1,4 @@
-import { LayoutDashboard, Receipt, TrendingUp, PiggyBank, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Receipt, TrendingUp, PiggyBank, Settings } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
 const navItems = [
@@ -6,15 +6,15 @@ const navItems = [
   { icon: Receipt, label: "Expenses", path: "/expenses" },
   { icon: TrendingUp, label: "Income", path: "/income" },
   { icon: PiggyBank, label: "Savings", path: "/savings" },
-  { icon: BarChart3, label: "Analytics", path: "/analytics" },
+  { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 const MobileNav = () => {
   const location = useLocation();
 
   return (
-    <nav className="md:hidden fixed bottom-4 left-4 right-4 z-50 flex items-center justify-around rounded-full border border-border/40 bg-card/90 px-2 py-2 backdrop-blur-xl"
-      style={{ boxShadow: "0 -4px 30px rgba(0,0,0,0.4)" }}
+    <nav className="md:hidden fixed bottom-4 left-4 right-4 z-50 flex items-center justify-around rounded-full border border-border bg-card/90 px-2 py-2 backdrop-blur-xl transition-all duration-300"
+      style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }}
     >
       {navItems.map(({ icon: Icon, label, path }) => {
         const isActive = location.pathname === path;

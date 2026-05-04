@@ -6,7 +6,6 @@ const navItems = [
   { icon: Receipt, label: "Expenses", path: "/expenses" },
   { icon: TrendingUp, label: "Income", path: "/income" },
   { icon: PiggyBank, label: "Savings", path: "/savings" },
-  { icon: BarChart3, label: "Analytics", path: "/analytics" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
@@ -14,9 +13,9 @@ const Sidebar = () => {
   const location = useLocation();
 
   return (
-    <aside className="hidden md:flex fixed left-0 top-0 h-screen w-[72px] flex-col items-center py-6 z-50 bg-background border-r border-border/30">
+    <aside className="hidden md:flex fixed left-0 top-0 h-screen w-[72px] flex-col items-center py-6 z-50 bg-background border-r border-border transition-colors duration-300">
       <div className="mb-8 flex h-10 w-10 items-center justify-center rounded-2xl gradient-coral">
-        <span className="font-heading text-sm font-bold text-foreground">PW</span>
+        <span className="font-heading text-sm font-bold text-white">PW</span>
       </div>
 
       <nav className="flex flex-1 flex-col items-center gap-2">

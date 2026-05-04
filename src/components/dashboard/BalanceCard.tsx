@@ -1,5 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 
+import { useFinancial } from "@/lib/FinancialContext";
+
 const data = [
   { month: "Jan", income: 4200, expense: 2800 },
   { month: "Feb", income: 3800, expense: 3100 },
@@ -10,9 +12,10 @@ const data = [
 ];
 
 const BalanceCard = () => {
+  const { accounts } = useFinancial();
+  const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
   const totalIncome = data.reduce((s, d) => s + d.income, 0);
   const totalExpense = data.reduce((s, d) => s + d.expense, 0);
-  const balance = totalIncome - totalExpense;
 
   return (
     <div className="glass-card card-glow-coral p-6 col-span-1 lg:col-span-2 animate-fade-up">
@@ -20,12 +23,12 @@ const BalanceCard = () => {
         <div>
           <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Total Balance</p>
           <h2 className="text-3xl font-heading font-bold mt-1 text-foreground">
-            ${balance.toLocaleString()}
+            ${totalBalance.toLocaleString()}
           </h2>
         </div>
         <span className="chip">
           <span className="h-1.5 w-1.5 rounded-full bg-coral" />
-          Last 6 months
+          Real-time
         </span>
       </div>
 

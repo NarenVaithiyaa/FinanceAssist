@@ -28,7 +28,7 @@ const SpendingTrendCard = () => {
 
       <div className="h-36 mt-4">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data}>
+          <AreaChart data={data} margin={{ left: 10, right: 10 }}>
             <defs>
               <linearGradient id="purpleGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="hsl(237 100% 72%)" stopOpacity={0.3} />

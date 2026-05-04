@@ -9,6 +9,64 @@
     --font-heading: 'Space Grotesk', sans-serif;
     --font-body: 'Inter', sans-serif;
 
+    --background: 0 0% 98%;
+    --background-secondary: 0 0% 95%;
+    --foreground: 228 12% 7%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 228 12% 7%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 228 12% 7%;
+
+    --primary: 6 100% 67%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 237 100% 72%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 228 10% 90%;
+    --muted-foreground: 220 4% 40%;
+
+    --accent: 258 100% 71%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 228 8% 90%;
+    --input: 228 8% 90%;
+    --ring: 6 100% 67%;
+
+    --radius: 1.5rem;
+
+    /* Custom accents */
+    --coral: 8 100% 67%;
+    --purple: 237 100% 72%;
+    --violet: 258 100% 71%;
+    --yellow: 40 90% 64%;
+    --mint: 144 30% 60%;
+    --soft-blue: 195 30% 74%;
+
+    /* Glow shadows */
+    --glow-coral: 0 0 30px hsla(8, 100%, 67%, 0.1);
+    --glow-purple: 0 0 30px hsla(237, 100%, 72%, 0.1);
+    --glow-violet: 0 0 30px hsla(258, 100%, 71%, 0.1);
+    --glow-yellow: 0 0 30px hsla(40, 90%, 64%, 0.1);
+    --glow-mint: 0 0 30px hsla(144, 30%, 60%, 0.05);
+    --glow-blue: 0 0 30px hsla(195, 30%, 74%, 0.05);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 220 4% 40%;
+    --sidebar-primary: 6 100% 67%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 228 8% 94%;
+    --sidebar-accent-foreground: 228 12% 7%;
+    --sidebar-border: 228 8% 90%;
+    --sidebar-ring: 6 100% 67%;
+  }
+
+  .dark {
     --background: 228 12% 7%;
     --background-secondary: 228 10% 8.5%;
     --foreground: 0 0% 100%;
@@ -38,15 +96,8 @@
     --input: 228 8% 18%;
     --ring: 6 100% 67%;
 
-    --radius: 1.5rem;
-
-    /* Custom accents */
-    --coral: 8 100% 67%;
-    --purple: 237 100% 72%;
-    --violet: 258 100% 71%;
-    --yellow: 40 90% 64%;
+    /* Custom accents (kept same or slightly adjusted for dark) */
     --mint: 144 12% 82%;
-    --soft-blue: 195 30% 74%;
 
     /* Glow shadows */
     --glow-coral: 0 0 30px hsla(8, 100%, 67%, 0.15);
@@ -58,12 +109,9 @@
 
     --sidebar-background: 228 12% 7%;
     --sidebar-foreground: 220 4% 67%;
-    --sidebar-primary: 6 100% 67%;
-    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 228 8% 14%;
     --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-border: 228 8% 18%;
-    --sidebar-ring: 6 100% 67%;
   }
 }
 
@@ -86,12 +134,20 @@
 @layer components {
   .glass-card {
     @apply rounded-3xl border border-border/50 bg-card/80 backdrop-blur-sm;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
     transition: transform 0.2s ease, box-shadow 0.3s ease;
+  }
+
+  .dark .glass-card {
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   }
 
   .glass-card:hover:not([role="dialog"]) {
     transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .dark .glass-card:hover:not([role="dialog"]) {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 

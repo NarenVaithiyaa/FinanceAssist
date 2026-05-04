@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Layout from "@/components/Layout";
-import { TrendingUp, Briefcase, Gift, Landmark, ArrowUpRight, Plus, Filter, Search, MoreHorizontal, CalendarIcon } from "lucide-react";
+import { TrendingUp, Briefcase, Gift, Landmark, ArrowUpRight, Plus, Filter, Search, MoreHorizontal, Calendar as CalendarIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useFinancial } from "@/lib/FinancialContext";
+import { toast } from "sonner";
 
 type IncomeCategory = "Income" | "Others";
 const allCategories: IncomeCategory[] = ["Income", "Others"];
@@ -19,21 +21,17 @@ const categoryIcons: Record<IncomeCategory, typeof Briefcase> = {
   Others: MoreHorizontal,
 };
 
-const initialIncomes = [
-  { id: 1, title: "Salary", category: "Income" as IncomeCategory, amount: 4500, date: "1st Feb", destination: "Bank account", description: "Company Inc.", growth: "+3.2%" },
-  { id: 2, title: "Freelance Project", category: "Income" as IncomeCategory, amount: 1200, date: "5th Feb", destination: "Bank account", description: "Client A", growth: "+15%" },
-  { id: 3, title: "Dividends", category: "Others" as IncomeCategory, amount: 340, date: "10th Feb", destination: "Bank account", description: "Investment", growth: "+2.1%" },
-  { id: 4, title: "Gift", category: "Others" as IncomeCategory, amount: 200, date: "14th Feb", destination: "Wallet", description: "Family", growth: null },
-  { id: 5, title: "Side Project", category: "Income" as IncomeCategory, amount: 680, date: "18th Feb", destination: "Bank account", description: "App Revenue", growth: "+28%" },
-];
-
 const Income = () => {
-  const [incomes, setIncomes] = useState(initialIncomes);
+  const { accounts, processTransaction } = useFinancial();
+  const [incomes, setIncomes] = useState([
+    { id: 1, title: "Salary", category: "Income" as IncomeCategory, amount: 4500, date: "1st Feb", destination: "Bank account", description: "Company Inc.", growth: "+3.2%" },
+    { id: 2, title: "Freelance Project", category: "Income" as IncomeCategory, amount: 1200, date: "5th Feb", destination: "Bank account", description: "Client A", growth: "+15%" },
+  ]);
   const [open, setOpen] = useState(false);
   const [filterCategory, setFilterCategory] = useState<IncomeCategory | "All">("All");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<IncomeCategory>("Income");
-  const [destination, setDestination] = useState("Bank account");
+  const [accountId, setAccountId] = useState(accounts[0]?.id || "");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState<Date | undefined>(new Date());
 
@@ -41,22 +39,28 @@ const Income = () => {
   const total = filtered.reduce((s, i) => s + i.amount, 0);
 
   const handleAdd = () => {
-    if (!amount || !date) return;
+    if (!amount || !date || !accountId) return;
+    const numAmount = parseFloat(amount);
+    const selectedAccount = accounts.find(a => a.id === accountId);
+    
     const newInc = {
       id: Date.now(),
       title: description || category,
       category,
-      amount: parseFloat(amount),
+      amount: numAmount,
       date: format(date, "PPP"),
-      destination,
+      destination: selectedAccount?.name || "Account",
       description,
       growth: null as string | null,
     };
+
+    processTransaction("income", numAmount, accountId);
     setIncomes([newInc, ...incomes]);
     setOpen(false);
     setAmount("");
     setDescription("");
     setDate(new Date());
+    toast.success(`$${numAmount} added to ${selectedAccount?.name}`);
   };
 
   return (
@@ -152,12 +156,15 @@ const Income = () => {
                 </Select>
               </div>
               <div>
-                <Label>Destination</Label>
-                <Select value={destination} onValueChange={setDestination}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <Label>Destination Account</Label>
+                <Select value={accountId} onValueChange={setAccountId}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select account" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Bank account">Bank account</SelectItem>
-                    <SelectItem value="Wallet">Wallet</SelectItem>
+                    {accounts.map(account => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.name} (${account.balance})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

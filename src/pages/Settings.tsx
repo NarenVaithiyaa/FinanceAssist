@@ -1,14 +1,55 @@
 import Layout from "@/components/Layout";
-import { User, Moon, LogOut, Download } from "lucide-react";
-
-const settingsItems = [
-  { icon: User, label: "Profile", description: "Manage your account details", action: "Edit" },
-  { icon: Moon, label: "Dark Mode", description: "Always on for this theme", action: "Active" },
-  { icon: Download, label: "Install App", description: "Add PennyWise to your home screen", action: "Install" },
-  { icon: LogOut, label: "Log Out", description: "Sign out of your account", action: "Sign Out" },
-];
+import { User, Moon, LogOut, Download, Sun, Landmark } from "lucide-react";
+import { useTheme } from "next-themes";
+import { Switch } from "@/components/ui/switch";
+import { useNavigate } from "react-router-dom";
 
 const SettingsPage = () => {
+  const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
+
+  const settingsItems = [
+    { 
+      icon: User, 
+      label: "Profile", 
+      description: "Manage your account details", 
+      action: (
+        <button 
+          onClick={() => navigate("/profile")}
+          className="chip hover:bg-muted/80 transition-colors btn-press"
+        >
+          Edit
+        </button>
+      ) 
+    },
+    { 
+      icon: theme === "dark" ? Moon : Sun, 
+      label: "Dark Mode", 
+      description: "Switch between dark and light themes", 
+      action: (
+        <Switch 
+          checked={theme === "dark"} 
+          onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")} 
+        />
+      ) 
+    },
+    { 
+      icon: Landmark, 
+      label: "Bank accounts & wallets", 
+      description: "Manage your linked accounts and wallets", 
+      action: (
+        <button 
+          onClick={() => navigate("/accounts")}
+          className="chip hover:bg-muted/80 transition-colors btn-press"
+        >
+          Manage
+        </button>
+      ) 
+    },
+    { icon: Download, label: "Install App", description: "Add PennyWise to your home screen", action: <button className="chip hover:bg-muted/80 transition-colors btn-press">Install</button> },
+    { icon: LogOut, label: "Log Out", description: "Sign out of your account", action: <button className="chip hover:bg-muted/80 transition-colors btn-press">Sign Out</button> },
+  ];
+
   return (
     <Layout>
       <div className="max-w-2xl mx-auto">
@@ -31,9 +72,7 @@ const SettingsPage = () => {
                 <p className="text-sm font-medium text-foreground">{item.label}</p>
                 <p className="text-xs text-muted-foreground">{item.description}</p>
               </div>
-              <button className="chip hover:bg-muted/80 transition-colors btn-press">
-                {item.action}
-              </button>
+              {item.action}
             </div>
           ))}
         </div>
