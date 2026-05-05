@@ -2,7 +2,7 @@ import Layout from "@/components/Layout";
 import { LineChart, Line, XAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { Pencil, Plus, Sparkles, Target, Trash2, TrendingUp } from "lucide-react";
 import { useFinancial } from "@/context/FinancialContext";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths, isWithinInterval, parseISO } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,20 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import type { SavingsGoal } from "@/services/goals";
+import { buildFinancialSnapshot, getDailySuggestionCacheKey, requestFinanceCoach, splitSuggestionText } from "@/lib/aiFinance";
 
 const normalizeInvestmentName = (value: string) => value.trim().toLowerCase();
 
 const formatMoney = (amount: number) => `Rs ${amount.toLocaleString()}`;
 
+const fallbackTips = [
+  "Add income, expenses, budgets, and goals to unlock personalized savings suggestions.",
+  "Set a monthly budget so your savings progress has a clear target.",
+  "Create an investment or savings goal to track long-term progress.",
+];
+
 const Savings = () => {
-  const { transactions, savingsGoals, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal } = useFinancial();
+  const { profile, accounts, transactions, budgets, savingsGoals, emis, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal } = useFinancial();
 
   const [open, setOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
@@ -25,6 +32,8 @@ const Savings = () => {
   const [targetAmount, setTargetAmount] = useState("");
   const [currentAmount, setCurrentAmount] = useState("");
   const [category, setCategory] = useState<"goal" | "investment">("goal");
+  const [tips, setTips] = useState(fallbackTips);
+  const [tipsLoading, setTipsLoading] = useState(false);
 
   const resetGoalForm = () => {
     setEditingGoal(null);
@@ -160,11 +169,62 @@ const Savings = () => {
     ? Math.min(100, Math.round((totalInvestmentCurrent / totalInvestmentTarget) * 100))
     : 0;
 
-  const tips = [
-    "Your savings rate is looking good this month!",
-    "Consider setting aside 20% of your income for long-term investments.",
-    "Track your recurring subscriptions to find more savings opportunities.",
-  ];
+  const financialData = useMemo(() => buildFinancialSnapshot({
+    profile,
+    accounts,
+    transactions,
+    budgets,
+    savingsGoals,
+    emis,
+  }), [profile, accounts, transactions, budgets, savingsGoals, emis]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const cacheKey = getDailySuggestionCacheKey(profile.email);
+    const cachedTips = localStorage.getItem(cacheKey);
+
+    if (cachedTips) {
+      try {
+        const parsedTips = JSON.parse(cachedTips);
+        if (Array.isArray(parsedTips) && parsedTips.length > 0) {
+          setTips(parsedTips);
+          return;
+        }
+      } catch (error) {
+        localStorage.removeItem(cacheKey);
+      }
+    }
+
+    const loadDailyTips = async () => {
+      setTipsLoading(true);
+      try {
+        const response = await requestFinanceCoach({
+          mode: "savings-suggestions",
+          prompt: "Generate today's smart savings suggestions.",
+          financialData,
+        });
+        const parsedTips = splitSuggestionText(response);
+
+        if (!cancelled && parsedTips.length > 0) {
+          setTips(parsedTips);
+          localStorage.setItem(cacheKey, JSON.stringify(parsedTips));
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setTips(fallbackTips);
+          toast.error(error.message || "Could not load AI savings suggestions.");
+        }
+      } finally {
+        if (!cancelled) setTipsLoading(false);
+      }
+    };
+
+    loadDailyTips();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [financialData, profile.email]);
 
   const renderGoalRow = (goal: SavingsGoal & { displayCurrentAmount?: number }, fallbackColor: string) => {
     const currentAmt = Number(goal.displayCurrentAmount ?? goal.current_amount) || 0;
@@ -272,7 +332,8 @@ const Savings = () => {
           <div className="glass-card card-glow-violet p-6 lg:col-span-2 animate-fade-up-delay-2">
             <div className="flex items-center gap-2 mb-4">
               <Sparkles className="h-5 w-5 text-violet" />
-              <p className="text-sm font-heading font-semibold text-foreground uppercase tracking-wider">Insights</p>
+              <p className="text-sm font-heading font-semibold text-foreground uppercase tracking-wider">Smart Suggestions</p>
+              {tipsLoading && <span className="text-[11px] text-muted-foreground">Refreshing...</span>}
             </div>
             <div className="space-y-3">
               {tips.map((tip, i) => (

@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { Send, Sparkles, Bot } from "lucide-react";
+import { useFinancial } from "@/context/FinancialContext";
+import { buildFinancialSnapshot, CoachMessage, requestFinanceCoach } from "@/lib/aiFinance";
+import { toast } from "sonner";
 
 const suggestions = [
   "How can I save more?",
@@ -8,30 +11,64 @@ const suggestions = [
   "Investment tips",
 ];
 
-type Message = { role: "user" | "assistant"; content: string };
-
-const initialMessages: Message[] = [
+const initialMessages: CoachMessage[] = [
   {
     role: "assistant",
-    content: "Hey! I'm your AI Finance Coach. I can help you track spending, set goals, and optimize your finances. What would you like to know?",
+    content: "Hey! I'm your AI Finance Coach. Ask me about your budget, expenses, savings, investments, EMIs, or cash flow.",
   },
 ];
 
 const AICoachPanel = () => {
-  const [messages, setMessages] = useState(initialMessages);
+  const { profile, accounts, transactions, budgets, savingsGoals, emis } = useFinancial();
+  const [messages, setMessages] = useState<CoachMessage[]>(initialMessages);
   const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    setMessages((prev) => [
-      ...prev,
-      { role: "user" as const, content: input },
-      {
-        role: "assistant" as const,
-        content: "That's a great question. Add income, expenses, budgets, and goals, and I can help you review the patterns that appear in your own data.",
-      },
-    ]);
+  const financialData = useMemo(() => buildFinancialSnapshot({
+    profile,
+    accounts,
+    transactions,
+    budgets,
+    savingsGoals,
+    emis,
+  }), [profile, accounts, transactions, budgets, savingsGoals, emis]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, sending]);
+
+  const sendPrompt = async (prompt: string) => {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt || sending) return;
+
+    const userMessage: CoachMessage = { role: "user", content: trimmedPrompt };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
     setInput("");
+    setSending(true);
+
+    try {
+      const response = await requestFinanceCoach({
+        mode: "chat",
+        prompt: trimmedPrompt,
+        financialData,
+        messages,
+      });
+
+      setMessages((prev) => [...prev, { role: "assistant", content: response }]);
+    } catch (error: any) {
+      toast.error(error.message || "AI finance coach is unavailable right now.");
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "I could not reach the AI service right now. Please check the Gemini API key and try again.",
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -43,19 +80,19 @@ const AICoachPanel = () => {
         <div>
           <p className="text-sm font-heading font-semibold text-foreground uppercase tracking-wider">AI Finance Coach</p>
           <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-            <Sparkles className="h-3 w-3 text-violet" /> Powered by AI
+            <Sparkles className="h-3 w-3 text-violet" /> Gemini powered
           </p>
         </div>
       </div>
 
-      <div className="flex-1 space-y-3 mb-4 max-h-48 overflow-y-auto pr-2">
+      <div className="flex-1 space-y-3 mb-4 max-h-64 overflow-y-auto pr-2">
         {messages.map((msg, i) => (
           <div
             key={i}
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+              className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === "user"
                   ? "bg-violet text-foreground rounded-br-md"
                   : "bg-muted text-foreground rounded-bl-md"
@@ -65,16 +102,25 @@ const AICoachPanel = () => {
             </div>
           </div>
         ))}
+        {sending && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-sm text-muted-foreground">
+              Thinking through your numbers...
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
       </div>
 
       <div className="flex flex-wrap gap-2 mb-3">
-        {suggestions.map((s) => (
+        {suggestions.map((suggestion) => (
           <button
-            key={s}
-            onClick={() => setInput(s)}
-            className="chip hover:bg-muted/80 transition-colors cursor-pointer btn-press text-xs"
+            key={suggestion}
+            onClick={() => sendPrompt(suggestion)}
+            disabled={sending}
+            className="chip hover:bg-muted/80 transition-colors cursor-pointer btn-press text-xs disabled:opacity-60"
           >
-            {s}
+            {suggestion}
           </button>
         ))}
       </div>
@@ -83,13 +129,15 @@ const AICoachPanel = () => {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="Ask your finance coach..."
-          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+          onKeyDown={(e) => e.key === "Enter" && sendPrompt(input)}
+          placeholder="Ask about your finances..."
+          disabled={sending}
+          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:opacity-60"
         />
         <button
-          onClick={handleSend}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-violet text-foreground transition-all hover:opacity-90 btn-press"
+          onClick={() => sendPrompt(input)}
+          disabled={sending || !input.trim()}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-violet text-foreground transition-all hover:opacity-90 btn-press disabled:opacity-50"
         >
           <Send className="h-4 w-4" />
         </button>
