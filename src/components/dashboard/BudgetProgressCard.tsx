@@ -4,8 +4,13 @@ import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from "da
 
 const normalizeInvestmentName = (value: string) => value.trim().toLowerCase();
 
+const calculateProgress = (current: number, target: number) => {
+  if (target <= 0) return 0;
+  return Math.min(100, Math.round((current / target) * 100));
+};
+
 const BudgetProgressCard = () => {
-  const { transactions, accounts, budgets, savingsGoals } = useFinancial();
+  const { transactions, budgets, savingsGoals } = useFinancial();
 
   const data = useMemo(() => {
     const now = new Date();
@@ -22,18 +27,16 @@ const BudgetProgressCard = () => {
       .filter(t => t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
+    const monthlyBudgetTarget = budgets.find(b => b.month === currentMonth && b.category === "Total")?.limit_amount || 0;
     
-    const monthlyBudgetTarget = budgets.find(b => b.month === currentMonth && b.category === "Total")?.limit_amount || 5000;
-    
-    // Sum total target amounts of all saving goals currently active
-    const totalSavingsGoalTarget = savingsGoals.filter(g => g.category !== 'investment').reduce((s, g) => s + Number(g.target_amount), 0) || 10000;
-    const totalSavingsGoalCurrent = savingsGoals.filter(g => g.category !== 'investment').reduce((s, g) => s + Number(g.current_amount), 0) || totalBalance;
+    const savingsOnlyGoals = savingsGoals.filter(g => g.category !== 'investment');
+    const investmentGoals = savingsGoals.filter(g => g.category === 'investment');
+
+    const totalSavingsGoalTarget = savingsOnlyGoals.reduce((s, g) => s + Number(g.target_amount), 0);
+    const totalSavingsGoalCurrent = savingsOnlyGoals.reduce((s, g) => s + Number(g.current_amount), 0);
 
     const investmentNames = new Set(
-      savingsGoals
-        .filter(g => g.category === 'investment')
-        .map(g => normalizeInvestmentName(g.name))
+      investmentGoals.map(g => normalizeInvestmentName(g.name))
     );
 
     const matchedInvestmentExpenseTotal = transactions
@@ -44,17 +47,17 @@ const BudgetProgressCard = () => {
       ))
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const totalInvestmentTarget = savingsGoals.filter(g => g.category === 'investment').reduce((s, g) => s + Number(g.target_amount), 0) || 1000;
-    const totalInvestmentCurrent = savingsGoals.filter(g => g.category === 'investment').reduce((s, g) => s + Number(g.current_amount), 0) + matchedInvestmentExpenseTotal;
+    const totalInvestmentTarget = investmentGoals.reduce((s, g) => s + Number(g.target_amount), 0);
+    const totalInvestmentCurrent = investmentGoals.reduce((s, g) => s + Number(g.current_amount), 0) + matchedInvestmentExpenseTotal;
 
     return [
       { label: "Monthly Budget", current: monthlyExpense, target: monthlyBudgetTarget, color: "bg-mint" },
       { label: "Savings Goal", current: totalSavingsGoalCurrent, target: totalSavingsGoalTarget, color: "bg-violet" },
       { label: "Investment", current: totalInvestmentCurrent, target: totalInvestmentTarget, color: "bg-coral" },
     ];
-  }, [transactions, accounts, budgets, savingsGoals]);
+  }, [transactions, budgets, savingsGoals]);
 
-  const mainPct = Math.round((data[0].current / data[0].target) * 100);
+  const mainPct = calculateProgress(data[0].current, data[0].target);
 
   return (
     <div className="glass-card card-glow-mint p-6 animate-fade-up-delay-2 h-full">
@@ -71,7 +74,7 @@ const BudgetProgressCard = () => {
 
       <div className="space-y-5">
         {data.map((goal) => {
-          const pct = Math.min(100, Math.round((goal.current / goal.target) * 100));
+          const pct = calculateProgress(goal.current, goal.target);
           return (
             <div key={goal.label}>
               <div className="flex justify-between items-center mb-2">

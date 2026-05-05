@@ -13,7 +13,7 @@ type Message = { role: "user" | "assistant"; content: string };
 const initialMessages: Message[] = [
   {
     role: "assistant",
-    content: "Hey! I'm your AI Finance Coach 🤖 I can help you track spending, set goals, and optimize your finances. What would you like to know?",
+    content: "Hey! I'm your AI Finance Coach. I can help you track spending, set goals, and optimize your finances. What would you like to know?",
   },
 ];
 
@@ -28,7 +28,7 @@ const AICoachPanel = () => {
       { role: "user" as const, content: input },
       {
         role: "assistant" as const,
-        content: "That's a great question! Based on your spending patterns, I'd suggest reviewing your dining expenses — they're up 15% this month. Want me to create a budget plan?",
+        content: "That's a great question. Add income, expenses, budgets, and goals, and I can help you review the patterns that appear in your own data.",
       },
     ]);
     setInput("");
