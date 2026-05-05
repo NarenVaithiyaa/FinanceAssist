@@ -1,0 +1,184 @@
+-- PennyWise Supabase setup
+-- Safe to run on an existing project: this creates missing tables/columns and
+-- policies without dropping user data.
+
+-- ==========================================
+-- 1. TABLES
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS public.account_balances (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+  bank numeric DEFAULT 0,
+  wallet numeric DEFAULT 0,
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.transactions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  amount numeric NOT NULL,
+  category text NOT NULL,
+  description text DEFAULT '',
+  date date NOT NULL,
+  type text NOT NULL CHECK (type IN ('income', 'expense')),
+  source text CHECK (source IN ('bank', 'wallet')),
+  destination text CHECK (destination IN ('bank', 'wallet')),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.expense_limits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  category text NOT NULL,
+  limit_amount numeric NOT NULL,
+  month text NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(user_id, category, month)
+);
+
+CREATE TABLE IF NOT EXISTS public.savings_goals (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  target_amount numeric NOT NULL,
+  current_amount numeric DEFAULT 0,
+  category text DEFAULT 'goal',
+  color text,
+  deadline date,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.emis (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  principal numeric NOT NULL,
+  months integer NOT NULL,
+  emi_amount numeric NOT NULL,
+  interest_rate numeric,
+  start_date date NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Add any columns that may be missing in older databases.
+ALTER TABLE public.account_balances ADD COLUMN IF NOT EXISTS bank numeric DEFAULT 0;
+ALTER TABLE public.account_balances ADD COLUMN IF NOT EXISTS wallet numeric DEFAULT 0;
+ALTER TABLE public.account_balances ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
+ALTER TABLE public.expense_limits ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+ALTER TABLE public.expense_limits ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
+ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS current_amount numeric DEFAULT 0;
+ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS category text DEFAULT 'goal';
+ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS color text;
+ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS deadline date;
+ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+ALTER TABLE public.savings_goals ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
+ALTER TABLE public.emis ADD COLUMN IF NOT EXISTS emi_amount numeric;
+ALTER TABLE public.emis ADD COLUMN IF NOT EXISTS interest_rate numeric;
+ALTER TABLE public.emis ADD COLUMN IF NOT EXISTS start_date date;
+ALTER TABLE public.emis ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+ALTER TABLE public.emis ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
+-- Keep investment/goal values constrained after the column exists.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'savings_goals_category_check'
+      AND conrelid = 'public.savings_goals'::regclass
+  ) THEN
+    ALTER TABLE public.savings_goals
+      ADD CONSTRAINT savings_goals_category_check
+      CHECK (category IN ('goal', 'investment'));
+  END IF;
+END $$;
+
+-- ==========================================
+-- 2. ROW LEVEL SECURITY
+-- ==========================================
+
+ALTER TABLE public.account_balances ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expense_limits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.savings_goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.emis ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users manage their own balance" ON public.account_balances;
+CREATE POLICY "Users manage their own balance"
+  ON public.account_balances
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own transactions" ON public.transactions;
+CREATE POLICY "Users manage their own transactions"
+  ON public.transactions
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own limits" ON public.expense_limits;
+CREATE POLICY "Users manage their own limits"
+  ON public.expense_limits
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own goals" ON public.savings_goals;
+CREATE POLICY "Users manage their own goals"
+  ON public.savings_goals
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users manage their own emis" ON public.emis;
+CREATE POLICY "Users manage their own emis"
+  ON public.emis
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- ==========================================
+-- 3. INITIAL BALANCE ON SIGNUP
+-- ==========================================
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.account_balances (user_id, bank, wallet)
+  VALUES (new.id, 0, 0)
+  ON CONFLICT (user_id) DO NOTHING;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- Backfill balances for users created before the trigger existed.
+INSERT INTO public.account_balances (user_id, bank, wallet)
+SELECT id, 0, 0
+FROM auth.users
+ON CONFLICT (user_id) DO NOTHING;
+
+-- ==========================================
+-- 4. INDEXES
+-- ==========================================
+
+CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON public.transactions(user_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_expense_limits_user_month ON public.expense_limits(user_id, month);
+CREATE INDEX IF NOT EXISTS idx_savings_goals_user ON public.savings_goals(user_id);
+CREATE INDEX IF NOT EXISTS idx_emis_user ON public.emis(user_id);

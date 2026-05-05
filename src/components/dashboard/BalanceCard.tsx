@@ -1,29 +1,56 @@
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
-
-import { useFinancial } from "@/lib/FinancialContext";
-
-const data = [
-  { month: "Jan", income: 4200, expense: 2800 },
-  { month: "Feb", income: 3800, expense: 3100 },
-  { month: "Mar", income: 5100, expense: 2600 },
-  { month: "Apr", income: 4600, expense: 3400 },
-  { month: "May", income: 4900, expense: 2900 },
-  { month: "Jun", income: 5400, expense: 3200 },
-];
+import { useFinancial } from "@/context/FinancialContext";
+import { useMemo } from "react";
+import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths, isWithinInterval, parseISO } from "date-fns";
 
 const BalanceCard = () => {
-  const { accounts } = useFinancial();
-  const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
-  const totalIncome = data.reduce((s, d) => s + d.income, 0);
-  const totalExpense = data.reduce((s, d) => s + d.expense, 0);
+  const { accounts, transactions } = useFinancial();
+  
+  const totalBalance = useMemo(() => accounts.reduce((s, a) => s + a.balance, 0), [accounts]);
+
+  const chartData = useMemo(() => {
+    // Get last 6 months
+    const last6Months = eachMonthOfInterval({
+      start: startOfMonth(subMonths(new Date(), 5)),
+      end: endOfMonth(new Date()),
+    });
+
+    return last6Months.map(monthDate => {
+      const monthLabel = format(monthDate, "MMM");
+      const monthStart = startOfMonth(monthDate);
+      const monthEnd = endOfMonth(monthDate);
+
+      const monthTransactions = transactions.filter(t => {
+        const tDate = parseISO(t.date);
+        return isWithinInterval(tDate, { start: monthStart, end: monthEnd });
+      });
+
+      const income = monthTransactions
+        .filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const expense = monthTransactions
+        .filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      return {
+        month: monthLabel,
+        income,
+        expense
+      };
+    });
+  }, [transactions]);
+
+  const totalIncome = useMemo(() => chartData.reduce((s, d) => s + d.income, 0), [chartData]);
+  const totalExpense = useMemo(() => chartData.reduce((s, d) => s + d.expense, 0), [chartData]);
 
   return (
-    <div className="glass-card card-glow-coral p-6 col-span-1 lg:col-span-2 animate-fade-up">
+    <div className="glass-card card-glow-coral p-6 col-span-1 lg:col-span-2 animate-fade-up h-full">
       <div className="flex items-start justify-between mb-4">
         <div>
           <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Total Balance</p>
           <h2 className="text-3xl font-heading font-bold mt-1 text-foreground">
-            ${totalBalance.toLocaleString()}
+            ₹{totalBalance.toLocaleString()}
           </h2>
         </div>
         <span className="chip">
@@ -45,7 +72,7 @@ const BalanceCard = () => {
 
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} barGap={4}>
+          <BarChart data={chartData} barGap={4}>
             <XAxis
               dataKey="month"
               axisLine={false}
@@ -70,12 +97,12 @@ const BalanceCard = () => {
 
       <div className="flex gap-6 mt-4 pt-4 border-t border-border/30">
         <div>
-          <p className="text-xs text-muted-foreground">Total Income</p>
-          <p className="text-sm font-semibold text-coral">${totalIncome.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground">Period Income</p>
+          <p className="text-sm font-semibold text-coral">₹{totalIncome.toLocaleString()}</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">Total Expense</p>
-          <p className="text-sm font-semibold text-foreground">${totalExpense.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground">Period Expense</p>
+          <p className="text-sm font-semibold text-foreground">₹{totalExpense.toLocaleString()}</p>
         </div>
       </div>
     </div>

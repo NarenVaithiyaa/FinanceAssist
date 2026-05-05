@@ -1,30 +1,52 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { useFinancial } from "@/context/FinancialContext";
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
 
-const expenseData = [
-  { name: "Education", value: 320, color: "hsl(237 100% 72%)" },
-  { name: "Entertainment", value: 280, color: "hsl(258 100% 71%)" },
-  { name: "Food", value: 850, color: "hsl(8 100% 67%)" },
-  { name: "Friends", value: 190, color: "hsl(40 90% 64%)" },
-  { name: "Health", value: 420, color: "hsl(144 12% 82%)" },
-  { name: "Personal", value: 340, color: "hsl(195 30% 74%)" },
-  { name: "Others", value: 290, color: "hsl(220 4% 67%)" },
-];
-
-const incomeData = [
-  { name: "Income", value: 5200, color: "hsl(40 90% 64%)" },
-  { name: "Others", value: 720, color: "hsl(195 30% 74%)" },
-];
+const CATEGORY_COLORS: Record<string, string> = {
+  Education: "hsl(237 100% 72%)",
+  Entertainment: "hsl(258 100% 71%)",
+  Food: "hsl(8 100% 67%)",
+  Friends: "hsl(40 90% 64%)",
+  Health: "hsl(144 12% 82%)",
+  Investment: "hsl(8 100% 67%)",
+  Personal: "hsl(195 30% 74%)",
+  Others: "hsl(220 4% 67%)",
+  Income: "hsl(40 90% 64%)",
+};
 
 const CategoryMapCard = () => {
+  const { transactions } = useFinancial();
   const [mode, setMode] = useState<"expense" | "income">("expense");
-  const data = mode === "expense" ? expenseData : incomeData;
+
+  const data = useMemo(() => {
+    const now = new Date();
+    const monthStart = startOfMonth(now);
+    const monthEnd = endOfMonth(now);
+
+    const monthTransactions = transactions.filter(t => {
+      const tDate = parseISO(t.date);
+      return isWithinInterval(tDate, { start: monthStart, end: monthEnd }) && t.type === mode;
+    });
+
+    const categories: Record<string, number> = {};
+    monthTransactions.forEach(t => {
+      categories[t.category] = (categories[t.category] || 0) + t.amount;
+    });
+
+    return Object.entries(categories).map(([name, value]) => ({
+      name,
+      value,
+      color: CATEGORY_COLORS[name] || CATEGORY_COLORS.Others
+    }));
+  }, [transactions, mode]);
 
   return (
-    <div className="glass-card card-glow-blue p-6 animate-fade-up-delay-3">
+    <div className="glass-card card-glow-blue p-6 animate-fade-up-delay-3 h-full">
       <div className="flex items-start justify-between mb-4">
         <div>
           <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Category Map</p>
+          <p className="text-[10px] text-muted-foreground uppercase">This Month</p>
         </div>
         <div className="flex rounded-full bg-muted p-0.5">
           <button
@@ -51,33 +73,37 @@ const CategoryMapCard = () => {
       </div>
 
       <div className="h-40 flex items-center justify-center">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={40}
-              outerRadius={65}
-              paddingAngle={3}
-              dataKey="value"
-              stroke="none"
-            >
-              {data.map((entry, index) => (
-                <Cell key={index} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(228 10% 10%)",
-                border: "1px solid hsl(228 8% 18%)",
-                borderRadius: "12px",
-                color: "#fff",
-                fontSize: "12px",
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+        {data.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={40}
+                outerRadius={65}
+                paddingAngle={3}
+                dataKey="value"
+                stroke="none"
+              >
+                {data.map((entry, index) => (
+                  <Cell key={index} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "hsl(228 10% 10%)",
+                  border: "1px solid hsl(228 8% 18%)",
+                  borderRadius: "12px",
+                  color: "#fff",
+                  fontSize: "12px",
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-xs text-muted-foreground">No data for this month</p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2 mt-2">

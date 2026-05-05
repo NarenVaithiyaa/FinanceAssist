@@ -3,10 +3,19 @@ import { User, Moon, LogOut, Download, Sun, Landmark } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
 
 const SettingsPage = () => {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const { signOut } = useAuth();
+
+  const handleLogout = async () => {
+    await signOut();
+    toast.success("Logged out successfully");
+    navigate("/auth");
+  };
 
   const settingsItems = [
     { 
@@ -47,7 +56,19 @@ const SettingsPage = () => {
       ) 
     },
     { icon: Download, label: "Install App", description: "Add PennyWise to your home screen", action: <button className="chip hover:bg-muted/80 transition-colors btn-press">Install</button> },
-    { icon: LogOut, label: "Log Out", description: "Sign out of your account", action: <button className="chip hover:bg-muted/80 transition-colors btn-press">Sign Out</button> },
+    { 
+      icon: LogOut, 
+      label: "Log Out", 
+      description: "Sign out of your account", 
+      action: (
+        <button 
+          onClick={handleLogout}
+          className="chip hover:bg-muted/80 transition-colors btn-press"
+        >
+          Sign Out
+        </button>
+      ) 
+    },
   ];
 
   return (

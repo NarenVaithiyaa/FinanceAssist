@@ -1,17 +1,21 @@
 import { ArrowDownRight, ArrowUpRight, Calendar } from "lucide-react";
-
-const todayExpenses = [
-    { title: "Grocery Store", amount: 84.5 },
-    { title: "Uber Ride", amount: 24.0 },
-];
-
-const todayIncome = [
-    { title: "Freelance Payment", amount: 350.0 },
-];
+import { useFinancial } from "@/context/FinancialContext";
+import { useMemo } from "react";
+import { isSameDay, parseISO } from "date-fns";
 
 const TodaySummaryCard = () => {
-    const totalExpense = todayExpenses.reduce((s, e) => s + e.amount, 0);
-    const totalIncome = todayIncome.reduce((s, i) => s + i.amount, 0);
+    const { transactions } = useFinancial();
+
+    const todayTransactions = useMemo(() => {
+        const now = new Date();
+        return transactions.filter(t => isSameDay(parseISO(t.date), now));
+    }, [transactions]);
+
+    const todayExpenses = useMemo(() => todayTransactions.filter(t => t.type === 'expense'), [todayTransactions]);
+    const todayIncome = useMemo(() => todayTransactions.filter(t => t.type === 'income'), [todayTransactions]);
+
+    const totalExpense = useMemo(() => todayExpenses.reduce((s, e) => s + e.amount, 0), [todayExpenses]);
+    const totalIncome = useMemo(() => todayIncome.reduce((s, i) => s + i.amount, 0), [todayIncome]);
     const net = totalIncome - totalExpense;
 
     const today = new Date();
@@ -22,7 +26,7 @@ const TodaySummaryCard = () => {
     });
 
     return (
-        <div className="glass-card card-glow-yellow p-6 animate-fade-up-delay-3">
+        <div className="glass-card card-glow-yellow p-6 animate-fade-up-delay-3 h-full">
             <div className="flex items-start justify-between mb-5">
                 <div>
                     <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">
@@ -55,7 +59,7 @@ const TodaySummaryCard = () => {
                         </span>
                     </div>
                     <p className="text-xl font-heading font-bold text-coral">
-                        ${totalExpense.toFixed(2)}
+                        ₹{totalExpense.toFixed(2)}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-1">
                         {todayExpenses.length} transaction{todayExpenses.length !== 1 ? "s" : ""}
@@ -70,7 +74,7 @@ const TodaySummaryCard = () => {
                         </span>
                     </div>
                     <p className="text-xl font-heading font-bold text-yellow">
-                        ${totalIncome.toFixed(2)}
+                        ₹{totalIncome.toFixed(2)}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-1">
                         {todayIncome.length} transaction{todayIncome.length !== 1 ? "s" : ""}
@@ -85,7 +89,7 @@ const TodaySummaryCard = () => {
                     className={`text-sm font-heading font-bold ${net >= 0 ? "text-yellow" : "text-coral"
                         }`}
                 >
-                    {net >= 0 ? "+" : "-"}${Math.abs(net).toFixed(2)}
+                    {net >= 0 ? "+" : "-"}₹{Math.abs(net).toFixed(2)}
                 </span>
             </div>
         </div>

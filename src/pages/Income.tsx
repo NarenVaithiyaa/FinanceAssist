@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Layout from "@/components/Layout";
-import { TrendingUp, Briefcase, Gift, Landmark, ArrowUpRight, Plus, Filter, Search, MoreHorizontal, Calendar as CalendarIcon } from "lucide-react";
+import { TrendingUp, Briefcase, Gift, Landmark, ArrowUpRight, Plus, Filter, Search, MoreHorizontal, Calendar as CalendarIcon, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useFinancial } from "@/lib/FinancialContext";
+import { useFinancial } from "@/context/FinancialContext";
 import { toast } from "sonner";
 
 type IncomeCategory = "Income" | "Others";
@@ -22,45 +22,51 @@ const categoryIcons: Record<IncomeCategory, typeof Briefcase> = {
 };
 
 const Income = () => {
-  const { accounts, processTransaction } = useFinancial();
-  const [incomes, setIncomes] = useState([
-    { id: 1, title: "Salary", category: "Income" as IncomeCategory, amount: 4500, date: "1st Feb", destination: "Bank account", description: "Company Inc.", growth: "+3.2%" },
-    { id: 2, title: "Freelance Project", category: "Income" as IncomeCategory, amount: 1200, date: "5th Feb", destination: "Bank account", description: "Client A", growth: "+15%" },
-  ]);
+  const { accounts, transactions, processTransaction, deleteTransaction, loading } = useFinancial();
   const [open, setOpen] = useState(false);
   const [filterCategory, setFilterCategory] = useState<IncomeCategory | "All">("All");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<IncomeCategory>("Income");
-  const [accountId, setAccountId] = useState(accounts[0]?.id || "");
+  const [destination, setDestination] = useState<"bank" | "wallet">("bank");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState<Date | undefined>(new Date());
 
+  const incomes = transactions.filter(t => t.type === 'income');
   const filtered = filterCategory === "All" ? incomes : incomes.filter((i) => i.category === filterCategory);
   const total = filtered.reduce((s, i) => s + i.amount, 0);
 
-  const handleAdd = () => {
-    if (!amount || !date || !accountId) return;
+  const handleAdd = async () => {
+    if (!amount || !date || !destination) return;
     const numAmount = parseFloat(amount);
-    const selectedAccount = accounts.find(a => a.id === accountId);
+    if (!Number.isFinite(numAmount) || numAmount <= 0) {
+      toast.error("Enter a valid income amount");
+      return;
+    }
     
-    const newInc = {
-      id: Date.now(),
-      title: description || category,
-      category,
-      amount: numAmount,
-      date: format(date, "PPP"),
-      destination: selectedAccount?.name || "Account",
-      description,
-      growth: null as string | null,
-    };
+    try {
+      await processTransaction({
+        type: "income",
+        amount: numAmount,
+        source: null,
+        destination,
+        category,
+        description: description || category,
+        date: format(date, "yyyy-MM-dd"),
+      });
 
-    processTransaction("income", numAmount, accountId);
-    setIncomes([newInc, ...incomes]);
-    setOpen(false);
-    setAmount("");
-    setDescription("");
-    setDate(new Date());
-    toast.success(`$${numAmount} added to ${selectedAccount?.name}`);
+      setOpen(false);
+      setAmount("");
+      setDescription("");
+      setDate(new Date());
+    } catch (error) {
+      // The context already shows the Supabase error toast.
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this income?")) {
+      await deleteTransaction(id);
+    }
   };
 
   return (
@@ -73,13 +79,12 @@ const Income = () => {
 
         <div className="glass-card card-glow-yellow p-6 mb-6 animate-fade-up">
           <p className="text-sm text-muted-foreground uppercase tracking-wider">Total Income This Month</p>
-          <h2 className="text-3xl font-heading font-bold mt-1 text-foreground">${total.toLocaleString()}</h2>
+              <h2 className="text-3xl font-heading font-bold mt-1 text-foreground">₹{total.toLocaleString()}</h2>
           <p className="text-xs text-yellow mt-2 flex items-center gap-1">
-            <ArrowUpRight className="h-3.5 w-3.5" /> +8.4% from last month
+            <ArrowUpRight className="h-3.5 w-3.5" /> Tracked from all sources
           </p>
         </div>
 
-        {/* Filter */}
         <div className="flex gap-3 mb-6">
           <Select value={filterCategory} onValueChange={(v) => setFilterCategory(v as IncomeCategory | "All")}>
             <SelectTrigger className="w-auto rounded-full bg-muted border-none gap-2 px-4">
@@ -95,36 +100,45 @@ const Income = () => {
           </Select>
         </div>
 
-        <div className="space-y-3">
-          {filtered.map((inc, i) => {
-            const Icon = categoryIcons[inc.category];
-            return (
-              <div
-                key={inc.id}
-                className="glass-card p-4 flex items-center gap-4 animate-fade-up"
-                style={{ animationDelay: `${i * 0.05}s` }}
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-yellow/20">
-                  <Icon className="h-5 w-5 text-yellow" />
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map((inc, i) => {
+              const Icon = categoryIcons[inc.category as IncomeCategory] || categoryIcons.Others;
+              return (
+                <div
+                  key={inc.id}
+                  className="glass-card p-4 flex items-center gap-4 animate-fade-up"
+                  style={{ animationDelay: `${i * 0.05}s` }}
+                >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-yellow/20">
+                    <Icon className="h-5 w-5 text-yellow" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{inc.description}</p>
+                    <p className="text-xs text-muted-foreground">{inc.category} · {format(new Date(inc.date), "PPP")} ({inc.destination})</p>
+                  </div>
+                  <div className="text-right flex items-center gap-4">
+                      <p className="text-sm font-semibold text-foreground">+₹{inc.amount.toLocaleString()}</p>
+                    <button 
+                      onClick={() => handleDelete(inc.id)}
+                      className="p-2 rounded-xl hover:bg-destructive/20 transition-colors btn-press"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{inc.title}</p>
-                  <p className="text-xs text-muted-foreground">{inc.description} · {inc.date}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-foreground">+${inc.amount.toLocaleString()}</p>
-                  {inc.growth && (
-                    <span className="inline-flex items-center rounded-full bg-yellow/10 px-2 py-0.5 text-[10px] font-medium text-yellow">
-                      {inc.growth}
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <p className="text-center text-muted-foreground py-8">No income found.</p>
+            )}
+          </div>
+        )}
 
-        {/* Floating Add Button */}
         <button
           onClick={() => setOpen(true)}
           className="fixed bottom-24 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full bg-yellow text-background flex items-center justify-center shadow-lg hover:scale-105 transition-transform btn-press z-50"
@@ -132,7 +146,6 @@ const Income = () => {
           <Plus className="h-6 w-6" />
         </button>
 
-        {/* Add Income Dialog */}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="glass-card border-border" onPointerDownOutside={(e) => e.preventDefault()}>
             <DialogHeader>
@@ -156,21 +169,18 @@ const Income = () => {
                 </Select>
               </div>
               <div>
-                <Label>Destination Account</Label>
-                <Select value={accountId} onValueChange={setAccountId}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select account" /></SelectTrigger>
+                <Label>Destination</Label>
+                <Select value={destination} onValueChange={(v) => setDestination(v as "bank" | "wallet")}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {accounts.map(account => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.name} (${account.balance})
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="bank">Bank (₹{accounts.find(a => a.id === 'bank')?.balance})</SelectItem>
+                    <SelectItem value="wallet">Wallet (₹{accounts.find(a => a.id === 'wallet')?.balance})</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Description (optional)</Label>
-                <Input placeholder="e.g. Monthly salary" value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" />
+                <Label>Description</Label>
+                <Input placeholder="e.g. Salary" value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" />
               </div>
               <div>
                 <Label>Date</Label>

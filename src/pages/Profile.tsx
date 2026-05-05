@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import Layout from "@/components/Layout";
-import { Camera, User, Mail, Shield, ChevronLeft, Save } from "lucide-react";
+import { Camera, User, Mail, Shield, ChevronLeft, Save, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,12 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { useFinancial } from "@/lib/FinancialContext";
+import { useFinancial } from "@/context/FinancialContext";
+import { useAuth } from "@/context/AuthContext";
 
 const ProfilePage = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { profile, setProfile } = useFinancial();
+  const { signOut } = useAuth();
   
   const [formData, setFormData] = useState(profile);
 
@@ -35,6 +37,12 @@ const ProfilePage = () => {
     setTimeout(() => navigate("/settings"), 1000);
   };
 
+  const handleLogout = async () => {
+    await signOut();
+    toast.success("Logged out successfully");
+    navigate("/auth");
+  };
+
   return (
     <Layout>
       <div className="max-w-2xl mx-auto pb-20">
@@ -47,10 +55,19 @@ const ProfilePage = () => {
           >
             <ChevronLeft className="h-6 w-6" />
           </Button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl md:text-3xl font-heading font-bold uppercase tracking-wider text-foreground">Profile</h1>
             <p className="text-sm text-muted-foreground mt-1">Customize your personal information</p>
           </div>
+          <Button 
+            variant="destructive" 
+            size="sm" 
+            onClick={handleLogout}
+            className="rounded-xl flex items-center gap-2"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
         </div>
 
         <div className="glass-card p-8 space-y-8 animate-fade-up">
@@ -107,6 +124,7 @@ const ProfilePage = () => {
                 value={formData.email} 
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="bg-muted/50 border-none rounded-xl h-12 focus:ring-2 focus:ring-coral"
+                disabled // Email usually comes from Auth and shouldn't be changed here easily
               />
             </div>
 
@@ -143,8 +161,8 @@ const ProfilePage = () => {
         <div className="mt-6 p-4 glass-card bg-soft-blue/5 border-soft-blue/20 flex items-start gap-4">
           <Shield className="h-5 w-5 text-soft-blue mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-foreground">Privacy Note</p>
-            <p className="text-xs text-muted-foreground">Your personal data is encrypted and stored locally. We never share your financial profile with third parties.</p>
+            <p className="text-sm font-medium text-foreground">Secure Storage</p>
+            <p className="text-xs text-muted-foreground">Your financial data is securely stored in Supabase with row-level security enabled.</p>
           </div>
         </div>
       </div>

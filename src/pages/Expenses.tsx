@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import Layout from "@/components/Layout";
-import { Search, Filter, Pencil, Trash2, ShoppingCart, Utensils, Car, Gamepad2, Zap, MoreHorizontal, Plus, GraduationCap, Users, Heart, User, X, CreditCard, Calendar as CalendarIcon, Info } from "lucide-react";
+import { Search, Filter, Trash2, Utensils, Gamepad2, MoreHorizontal, Plus, GraduationCap, Users, Heart, User, CreditCard, Calendar as CalendarIcon, Zap, TrendingUp } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,9 +10,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { format, differenceInMonths, addMonths, isAfter } from "date-fns";
+import { format, differenceInMonths, addMonths, isAfter, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useFinancial } from "@/lib/FinancialContext";
+import { useFinancial } from "@/context/FinancialContext";
 import { toast } from "sonner";
 
 const categoryConfig = {
@@ -21,46 +21,39 @@ const categoryConfig = {
   Food: { icon: Utensils, color: "bg-coral" },
   Friends: { icon: Users, color: "bg-yellow" },
   Health: { icon: Heart, color: "bg-mint" },
+  Investment: { icon: TrendingUp, color: "bg-coral" },
   Personal: { icon: User, color: "bg-soft-blue" },
   Others: { icon: MoreHorizontal, color: "bg-muted" },
 } as const;
 
 type ExpenseCategory = keyof typeof categoryConfig;
 
-const allCategories: ExpenseCategory[] = ["Education", "Entertainment", "Food", "Friends", "Health", "Personal", "Others"];
-
-const initialExpenses = [
-  { id: 1, title: "Grocery Store", category: "Food" as ExpenseCategory, amount: 84.50, date: "Today", source: "Wallet", description: "" },
-  { id: 2, title: "Uber Ride", category: "Personal" as ExpenseCategory, amount: 24.00, date: "Today", source: "Wallet", description: "" },
-  { id: 3, title: "Netflix", category: "Entertainment" as ExpenseCategory, amount: 15.99, date: "Yesterday", source: "Bank account", description: "" },
-  { id: 4, title: "Electric Bill", category: "Others" as ExpenseCategory, amount: 120.00, date: "Yesterday", source: "Bank account", description: "" },
-  { id: 5, title: "Amazon", category: "Personal" as ExpenseCategory, amount: 67.30, date: "2 days ago", source: "Bank account", description: "" },
-  { id: 6, title: "Restaurant", category: "Food" as ExpenseCategory, amount: 52.80, date: "3 days ago", source: "Wallet", description: "" },
-];
-
-interface EMI {
-  id: number;
-  name: string;
-  principal: number;
-  months: number;
-  emiAmount: number;
-  interestRate?: number;
-  startDate: Date;
-}
+const allCategories: ExpenseCategory[] = ["Education", "Entertainment", "Food", "Friends", "Health", "Investment", "Personal", "Others"];
 
 const Expenses = () => {
-  const { accounts, processTransaction } = useFinancial();
-  const [expenses, setExpenses] = useState(initialExpenses);
+  const { accounts, transactions, budgets, upsertBudget, processTransaction, deleteTransaction, emis, addEMI, deleteEMI, loading } = useFinancial();
   const [open, setOpen] = useState(false);
   const [filterCategory, setFilterCategory] = useState<ExpenseCategory | "All">("All");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<ExpenseCategory>("Food");
-  const [accountId, setAccountId] = useState(accounts[0]?.id || "");
+  const [source, setSource] = useState<"bank" | "wallet">("bank");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState<Date | undefined>(new Date());
 
-  // EMI State
-  const [emis, setEmis] = useState<EMI[]>([]);
+  const [budgetOpen, setBudgetOpen] = useState(false);
+  const [budgetAmount, setBudgetAmount] = useState("");
+
+  const currentMonthBudget = useMemo(() => budgets.find(b => b.category === "Total")?.limit_amount || 0, [budgets]);
+  
+  const currentMonthExpenses = useMemo(() => {
+    const now = new Date();
+    const start = startOfMonth(now);
+    const end = endOfMonth(now);
+    return transactions
+      .filter(t => t.type === 'expense' && isWithinInterval(parseISO(t.date), { start, end }))
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [transactions]);
+
   const [emiOpen, setEmiOpen] = useState(false);
   const [emiName, setEmiName] = useState("");
   const [emiPrincipal, setEmiPrincipal] = useState("");
@@ -71,68 +64,99 @@ const Expenses = () => {
 
   const [searchQuery, setSearchQuery] = useState("");
 
+  const expenses = transactions.filter(t => t.type === 'expense');
+
   const filtered = (filterCategory === "All" ? expenses : expenses.filter((e) => e.category === filterCategory))
     .filter((e) => 
-      e.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      e.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.description.toLowerCase().includes(searchQuery.toLowerCase())
+      e.description.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      e.category.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-  const handleAdd = () => {
-    if (!amount || !date || !accountId) return;
+  const handleAdd = async () => {
+    if (!amount || !date || !source) return;
     const numAmount = parseFloat(amount);
-    const selectedAccount = accounts.find(a => a.id === accountId);
+    if (!Number.isFinite(numAmount) || numAmount <= 0) {
+      toast.error("Enter a valid expense amount");
+      return;
+    }
+    
+    try {
+      await processTransaction({
+        type: "expense",
+        amount: numAmount,
+        source,
+        destination: null,
+        category,
+        description: description || category,
+        date: format(date, "yyyy-MM-dd"),
+      });
 
-    const newExp = {
-      id: Date.now(),
-      title: description || category,
-      category,
-      amount: numAmount,
-      date: format(date, "PPP"),
-      source: selectedAccount?.name || "Account",
-      description,
-    };
-
-    processTransaction("expense", numAmount, accountId);
-    setExpenses([newExp, ...expenses]);
-    setOpen(false);
-    setAmount("");
-    setDescription("");
-    setDate(new Date());
-    toast.success(`$${numAmount} paid from ${selectedAccount?.name}`);
+      setOpen(false);
+      setAmount("");
+      setDescription("");
+      setDate(new Date());
+    } catch (error) {
+      // The context already shows the Supabase error toast.
+    }
   };
 
-  const handleAddEMI = () => {
+  const handleUpdateBudget = async () => {
+    if (!budgetAmount) return;
+    await upsertBudget(parseFloat(budgetAmount));
+    setBudgetOpen(false);
+    setBudgetAmount("");
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this expense?")) {
+      await deleteTransaction(id);
+    }
+  };
+
+  const handleAddEMI = async () => {
     if (!emiName || !emiPrincipal || !emiMonths || !emiAmountEachMonth || !emiStartDate) return;
-    const newEMI: EMI = {
-      id: Date.now(),
-      name: emiName,
-      principal: parseFloat(emiPrincipal),
-      months: parseInt(emiMonths),
-      emiAmount: parseFloat(emiAmountEachMonth),
-      interestRate: emiInterest ? parseFloat(emiInterest) : undefined,
-      startDate: emiStartDate,
-    };
-    setEmis([...emis, newEMI]);
-    setEmiOpen(false);
-    setEmiName("");
-    setEmiPrincipal("");
-    setEmiMonths("");
-    setEmiAmountEachMonth("");
-    setEmiInterest("");
-    setEmiStartDate(new Date());
+    const principal = parseFloat(emiPrincipal);
+    const months = parseInt(emiMonths, 10);
+    const emiAmount = parseFloat(emiAmountEachMonth);
+    const interestRate = emiInterest ? parseFloat(emiInterest) : undefined;
+
+    if (!Number.isFinite(principal) || !Number.isFinite(months) || !Number.isFinite(emiAmount) || principal <= 0 || months <= 0 || emiAmount <= 0) {
+      toast.error("Enter valid EMI details");
+      return;
+    }
+
+    try {
+      await addEMI({
+        name: emiName,
+        principal,
+        months,
+        emi_amount: emiAmount,
+        interest_rate: interestRate,
+        start_date: format(emiStartDate, "yyyy-MM-dd"),
+      });
+      setEmiOpen(false);
+      setEmiName("");
+      setEmiPrincipal("");
+      setEmiMonths("");
+      setEmiAmountEachMonth("");
+      setEmiInterest("");
+      setEmiStartDate(new Date());
+    } catch (error) {
+      // The context keeps the form open and surfaces the save failure.
+    }
   };
 
-  const calculateEMIProgress = (emi: EMI) => {
+  const calculateEMIProgress = (emi: any) => {
     const now = new Date();
-    const monthsCompleted = Math.max(0, Math.min(emi.months, differenceInMonths(now, emi.startDate)));
+    const startDateObj = typeof emi.start_date === 'string' ? parseISO(emi.start_date) : new Date(emi.start_date);
+    const monthsCompleted = Math.max(0, Math.min(emi.months, differenceInMonths(now, startDateObj)));
     const monthsPending = emi.months - monthsCompleted;
     
-    const amountPaid = monthsCompleted * emi.emiAmount;
-    const totalRepayment = emi.months * emi.emiAmount;
+    const amountPaid = monthsCompleted * emi.emi_amount;
+    const totalRepayment = emi.months * emi.emi_amount;
     const amountLeft = totalRepayment - amountPaid;
     
-    const nextDueDate = addMonths(emi.startDate, monthsCompleted);
+    const nextDueDate = addMonths(startDateObj, monthsCompleted);
     const displayDueDate = isAfter(nextDueDate, now) ? nextDueDate : addMonths(nextDueDate, 1);
     
     const isCompleted = monthsCompleted === emi.months;
@@ -153,9 +177,27 @@ const Expenses = () => {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto relative pb-20">
-        <div className="mb-6">
-          <h1 className="text-2xl md:text-3xl font-heading font-bold uppercase tracking-wider text-foreground">Expenses</h1>
-          <p className="text-sm text-muted-foreground mt-1">Track and manage your spending</p>
+        <div className="mb-6 flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-heading font-bold uppercase tracking-wider text-foreground">Expenses</h1>
+            <p className="text-sm text-muted-foreground mt-1">Track and manage your spending</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-muted-foreground uppercase font-bold">Monthly Budget</p>
+            <p className="text-xl font-heading font-bold text-foreground">₹{currentMonthBudget.toLocaleString()}</p>
+            <Button variant="link" size="sm" onClick={() => { setBudgetAmount(currentMonthBudget.toString()); setBudgetOpen(true); }} className="text-coral p-0 h-auto text-xs">Update Budget</Button>
+          </div>
+        </div>
+
+        <div className="glass-card p-6 mb-8 border-coral/20">
+            <div className="flex justify-between items-center mb-4">
+                <p className="text-sm font-medium text-muted-foreground">Budget Progress ({format(new Date(), "MMMM")})</p>
+                <p className="text-sm font-bold text-foreground">₹{currentMonthExpenses.toLocaleString()} / ₹{currentMonthBudget.toLocaleString()}</p>
+            </div>
+            <Progress value={currentMonthBudget > 0 ? (currentMonthExpenses / currentMonthBudget) * 100 : 0} className="h-2 bg-muted" indicatorClassName={currentMonthExpenses > currentMonthBudget ? "bg-destructive" : "bg-coral"} />
+            {currentMonthExpenses > currentMonthBudget && (
+                <p className="text-[10px] text-destructive mt-2 font-bold uppercase">Budget exceeded by ₹{(currentMonthExpenses - currentMonthBudget).toLocaleString()}!</p>
+            )}
         </div>
 
         <Tabs defaultValue="expenses" className="w-full">
@@ -189,38 +231,46 @@ const Expenses = () => {
               </Select>
             </div>
 
-            <div className="space-y-3">
-              {filtered.map((exp, i) => {
-                const cfg = categoryConfig[exp.category];
-                const Icon = cfg.icon;
-                return (
-                  <div
-                    key={exp.id}
-                    className="glass-card p-4 flex items-center gap-4 animate-fade-up"
-                    style={{ animationDelay: `${i * 0.05}s` }}
-                  >
-                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${cfg.color}/20`}>
-                      <Icon className={`h-5 w-5 text-foreground opacity-70`} />
+            {loading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filtered.map((exp, i) => {
+                  const cfg = categoryConfig[exp.category as ExpenseCategory] || categoryConfig.Others;
+                  const Icon = cfg.icon;
+                  return (
+                    <div
+                      key={exp.id}
+                      className="glass-card p-4 flex items-center gap-4 animate-fade-up"
+                      style={{ animationDelay: `${i * 0.05}s` }}
+                    >
+                      <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${cfg.color}/20`}>
+                        <Icon className={`h-5 w-5 text-foreground opacity-70`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">{exp.description}</p>
+                        <p className="text-xs text-muted-foreground">{exp.category} · {format(new Date(exp.date), "PPP")} ({exp.source})</p>
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">-₹{exp.amount.toFixed(2)}</p>
+                      <div className="flex gap-1">
+                        <button 
+                          onClick={() => handleDelete(exp.id)}
+                          className="p-2 rounded-xl hover:bg-destructive/20 transition-colors btn-press"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{exp.title}</p>
-                      <p className="text-xs text-muted-foreground">{exp.category} · {exp.date}</p>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">-${exp.amount.toFixed(2)}</p>
-                    <div className="flex gap-1">
-                      <button className="p-2 rounded-xl hover:bg-muted transition-colors btn-press">
-                        <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                      <button className="p-2 rounded-xl hover:bg-destructive/20 transition-colors btn-press">
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <p className="text-center text-muted-foreground py-8">No expenses found.</p>
+                )}
+              </div>
+            )}
 
-            {/* Floating Add Button for Expenses */}
             <button
               onClick={() => setOpen(true)}
               className="fixed bottom-24 right-6 md:bottom-8 md:right-8 h-14 w-14 rounded-full bg-coral text-white flex items-center justify-center shadow-lg hover:scale-105 transition-transform btn-press z-50"
@@ -252,17 +302,14 @@ const Expenses = () => {
                               )}
                             </div>
                             <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Principal: ${emi.principal.toLocaleString()}</span>
-                              {emi.interestRate && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{emi.interestRate}% Interest</span>
-                              )}
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Principal: ₹{emi.principal.toLocaleString()}</span>
                             </div>
                           </div>
                           {!progress.isCompleted ? (
                             <div className="bg-coral/10 border border-coral/20 rounded-2xl p-4 text-right">
                               <p className="text-[10px] uppercase font-bold text-coral tracking-wider mb-0.5">Next Due Date</p>
                               <p className="text-sm font-bold text-foreground">{format(progress.nextDueDate, "MMM dd, yyyy")}</p>
-                              <p className="text-xs font-medium text-coral/80 mt-1">${emi.emiAmount.toFixed(2)}</p>
+                              <p className="text-xs font-medium text-coral/80 mt-1">₹{Number(emi.emi_amount).toFixed(2)}</p>
                             </div>
                           ) : (
                             <div className="bg-mint/10 border border-mint/20 rounded-2xl p-4 text-right flex items-center gap-2">
@@ -271,30 +318,9 @@ const Expenses = () => {
                             </div>
                           )}
                         </div>
-
                         <div className="space-y-6">
                           <div>
-                            <div className="flex justify-between text-xs mb-2">
-                              <span className="text-muted-foreground font-medium">Time Progress</span>
-                              <span className="text-foreground font-bold">{progress.monthsCompleted} / {emi.months} Months</span>
-                            </div>
                             <Progress value={progress.monthProgress} className="h-2 bg-muted" indicatorClassName={progress.isCompleted ? "bg-mint" : "bg-coral"} />
-                            <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
-                              <span>{progress.monthsCompleted} months completed</span>
-                              <span>{progress.monthsPending} months pending</span>
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="flex justify-between text-xs mb-2">
-                              <span className="text-muted-foreground font-medium">Payment Progress</span>
-                              <span className="text-foreground font-bold">${progress.amountPaid.toLocaleString()} / ${progress.totalAmount.toLocaleString()}</span>
-                            </div>
-                            <Progress value={progress.amountProgress} className="h-2 bg-muted" indicatorClassName="bg-mint" />
-                            <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
-                              <span>${progress.amountPaid.toLocaleString()} paid</span>
-                              <span>${progress.amountLeft.toLocaleString()} left</span>
-                            </div>
                           </div>
                         </div>
                       </div>
@@ -302,13 +328,7 @@ const Expenses = () => {
                   })}
                 </div>
               )}
-
-              <Button 
-                onClick={() => setEmiOpen(true)}
-                className="w-full bg-muted hover:bg-muted/80 text-foreground border border-border/50 h-12 rounded-2xl font-medium"
-              >
-                <Plus className="mr-2 h-4 w-4" /> Add New EMI
-              </Button>
+              <Button onClick={() => setEmiOpen(true)} className="w-full bg-muted hover:bg-muted/80 text-foreground border border-border/50 h-12 rounded-2xl font-medium"><Plus className="mr-2 h-4 w-4" /> Add New EMI</Button>
             </div>
           </TabsContent>
         </Tabs>
@@ -337,21 +357,18 @@ const Expenses = () => {
                 </Select>
               </div>
               <div>
-                <Label>Source Account</Label>
-                <Select value={accountId} onValueChange={setAccountId}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select account" /></SelectTrigger>
+                <Label>Source</Label>
+                <Select value={source} onValueChange={(v) => setSource(v as "bank" | "wallet")}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {accounts.map(account => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.name} (${account.balance})
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="bank">Bank (₹{accounts.find(a => a.id === 'bank')?.balance})</SelectItem>
+                    <SelectItem value="wallet">Wallet (₹{accounts.find(a => a.id === 'wallet')?.balance})</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Description (optional)</Label>
-                <Input placeholder="e.g. Lunch with friends" value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" />
+                <Label>Description</Label>
+                <Input placeholder="e.g. Lunch" value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" />
               </div>
               <div>
                 <Label>Date</Label>
@@ -368,6 +385,23 @@ const Expenses = () => {
                 </Popover>
               </div>
               <Button onClick={handleAdd} className="w-full bg-coral hover:bg-coral/90 text-white">Add Expense</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Monthly Budget Dialog */}
+        <Dialog open={budgetOpen} onOpenChange={setBudgetOpen}>
+          <DialogContent className="glass-card border-border">
+            <DialogHeader>
+              <DialogTitle className="font-heading uppercase tracking-wider">Set Monthly Budget</DialogTitle>
+              <DialogDescription>Enter your total spending limit for this month.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-2">
+              <div>
+                <Label>Monthly Limit (₹)</Label>
+                <Input type="number" placeholder="0.00" value={budgetAmount} onChange={(e) => setBudgetAmount(e.target.value)} className="mt-1" />
+              </div>
+              <Button onClick={handleUpdateBudget} className="w-full bg-coral hover:bg-coral/90 text-white">Save Budget</Button>
             </div>
           </DialogContent>
         </Dialog>

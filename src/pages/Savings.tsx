@@ -1,42 +1,209 @@
 import Layout from "@/components/Layout";
 import { LineChart, Line, XAxis, ResponsiveContainer, Tooltip } from "recharts";
-import { Sparkles, Target } from "lucide-react";
+import { Pencil, Plus, Sparkles, Target, Trash2, TrendingUp } from "lucide-react";
+import { useFinancial } from "@/context/FinancialContext";
+import { useMemo, useState } from "react";
+import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths, isWithinInterval, parseISO } from "date-fns";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+import type { SavingsGoal } from "@/services/goals";
 
-const savingsData = [
-  { month: "Jan", amount: 800 },
-  { month: "Feb", amount: 1200 },
-  { month: "Mar", amount: 1050 },
-  { month: "Apr", amount: 1800 },
-  { month: "May", amount: 2100 },
-  { month: "Jun", amount: 2400 },
-];
+const normalizeInvestmentName = (value: string) => value.trim().toLowerCase();
 
-const goals = [
-  { name: "Emergency Fund", current: 4200, target: 10000, color: "bg-violet" },
-  { name: "Vacation", current: 1800, target: 3000, color: "bg-coral" },
-  { name: "New Laptop", current: 1200, target: 2500, color: "bg-purple" },
-];
-
-const tips = [
-  "Try cutting dining expenses by 10% — that's ~$85/month saved.",
-  "Your subscription total is $89/mo. Consider auditing unused ones.",
-  "At your current rate, you'll hit your emergency fund goal by October.",
-];
+const formatMoney = (amount: number) => `Rs ${amount.toLocaleString()}`;
 
 const Savings = () => {
+  const { transactions, savingsGoals, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal } = useFinancial();
+
+  const [open, setOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
+  const [name, setName] = useState("");
+  const [targetAmount, setTargetAmount] = useState("");
+  const [currentAmount, setCurrentAmount] = useState("");
+  const [category, setCategory] = useState<"goal" | "investment">("goal");
+
+  const resetGoalForm = () => {
+    setEditingGoal(null);
+    setName("");
+    setTargetAmount("");
+    setCurrentAmount("");
+    setCategory("goal");
+  };
+
+  const openAddDialog = (nextCategory: "goal" | "investment") => {
+    resetGoalForm();
+    setCategory(nextCategory);
+    setOpen(true);
+  };
+
+  const openEditDialog = (goal: SavingsGoal) => {
+    setEditingGoal(goal);
+    setName(goal.name);
+    setTargetAmount(String(goal.target_amount));
+    setCurrentAmount(String(goal.current_amount || 0));
+    setCategory(goal.category === "investment" ? "investment" : "goal");
+    setOpen(true);
+  };
+
+  const handleSaveGoal = async () => {
+    if (!name || !targetAmount) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    const parsedTarget = parseFloat(targetAmount);
+    const parsedCurrent = currentAmount ? parseFloat(currentAmount) : 0;
+
+    if (!Number.isFinite(parsedTarget) || parsedTarget <= 0 || !Number.isFinite(parsedCurrent) || parsedCurrent < 0) {
+      toast.error("Enter valid goal amounts");
+      return;
+    }
+
+    try {
+      const goalData = {
+        name: name.trim(),
+        target_amount: parsedTarget,
+        current_amount: parsedCurrent,
+        category,
+        color: category === "investment" ? "bg-coral" : "bg-violet",
+      };
+
+      if (editingGoal) {
+        await updateSavingsGoal(editingGoal.id, goalData);
+      } else {
+        await addSavingsGoal(goalData);
+      }
+
+      setOpen(false);
+      resetGoalForm();
+    } catch (error) {
+      // The context shows the Supabase error toast and keeps the form open.
+    }
+  };
+
+  const handleDeleteGoal = async (goal: SavingsGoal) => {
+    if (!window.confirm(`Delete "${goal.name}"?`)) return;
+
+    try {
+      await deleteSavingsGoal(goal.id);
+    } catch (error) {
+      // The context shows the Supabase error toast.
+    }
+  };
+
+  const savingsData = useMemo(() => {
+    const months = eachMonthOfInterval({
+      start: startOfMonth(subMonths(new Date(), 5)),
+      end: endOfMonth(new Date()),
+    });
+
+    return months.map(monthDate => {
+      const monthStart = startOfMonth(monthDate);
+      const monthEnd = endOfMonth(monthDate);
+
+      const monthTransactions = transactions.filter(t => {
+        const tDate = parseISO(t.date);
+        return isWithinInterval(tDate, { start: monthStart, end: monthEnd });
+      });
+
+      const income = monthTransactions
+        .filter(t => t.type === "income")
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const expense = monthTransactions
+        .filter(t => t.type === "expense")
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      return {
+        month: format(monthDate, "MMM"),
+        amount: income - expense,
+      };
+    });
+  }, [transactions]);
+
+  const currentMonthSavings = savingsData[savingsData.length - 1]?.amount || 0;
+
+  const actualGoals = useMemo(() => savingsGoals.filter(g => g.category !== "investment"), [savingsGoals]);
+  const actualInvestments = useMemo(() => savingsGoals.filter(g => g.category === "investment"), [savingsGoals]);
+
+  const investmentExpensesByName = useMemo(() => {
+    return transactions
+      .filter(t => t.type === "expense" && t.category === "Investment")
+      .reduce<Record<string, number>>((totals, transaction) => {
+        const key = normalizeInvestmentName(transaction.description || "");
+        if (!key) return totals;
+
+        totals[key] = (totals[key] || 0) + transaction.amount;
+        return totals;
+      }, {});
+  }, [transactions]);
+
+  const investmentProgress = useMemo(() => {
+    return actualInvestments.map(goal => {
+      const baseAmount = Number(goal.current_amount) || 0;
+      const matchedExpenseAmount = investmentExpensesByName[normalizeInvestmentName(goal.name)] || 0;
+
+      return {
+        ...goal,
+        displayCurrentAmount: baseAmount + matchedExpenseAmount,
+      };
+    });
+  }, [actualInvestments, investmentExpensesByName]);
+
+  const totalInvestmentCurrent = investmentProgress.reduce((sum, goal) => sum + goal.displayCurrentAmount, 0);
+  const totalInvestmentTarget = actualInvestments.reduce((sum, goal) => sum + Number(goal.target_amount), 0);
+  const totalInvestmentPct = totalInvestmentTarget > 0
+    ? Math.min(100, Math.round((totalInvestmentCurrent / totalInvestmentTarget) * 100))
+    : 0;
+
+  const tips = [
+    "Your savings rate is looking good this month!",
+    "Consider setting aside 20% of your income for long-term investments.",
+    "Track your recurring subscriptions to find more savings opportunities.",
+  ];
+
+  const renderGoalRow = (goal: SavingsGoal & { displayCurrentAmount?: number }, fallbackColor: string) => {
+    const currentAmt = Number(goal.displayCurrentAmount ?? goal.current_amount) || 0;
+    const targetAmt = Number(goal.target_amount) || 1;
+    const pct = Math.min(100, Math.round((currentAmt / targetAmt) * 100));
+
+    return (
+      <div key={goal.id}>
+        <div className="flex justify-between mb-2 gap-3">
+          <span className="text-sm text-foreground truncate">{goal.name}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-muted-foreground">{formatMoney(currentAmt)} / {formatMoney(targetAmt)}</span>
+            <button onClick={() => openEditDialog(goal)} className="p-1 rounded-md hover:bg-muted transition-colors" title="Edit">
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+            <button onClick={() => handleDeleteGoal(goal)} className="p-1 rounded-md hover:bg-destructive/20 transition-colors" title="Delete">
+              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+        <div className="h-2 rounded-full bg-muted overflow-hidden">
+          <div className={`h-full rounded-full ${goal.color || fallbackColor} transition-all duration-700`} style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Layout>
       <div className="max-w-5xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl md:text-3xl font-heading font-bold uppercase tracking-wider text-foreground">Savings</h1>
-          <p className="text-sm text-muted-foreground mt-1">AI-powered insights for your savings goals</p>
+          <p className="text-sm text-muted-foreground mt-1">Insights for your savings goals</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Trend Chart */}
           <div className="glass-card card-glow-violet p-6 animate-fade-up">
-            <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">Savings Trend</p>
-            <h3 className="text-2xl font-heading font-bold text-foreground">$2,400</h3>
+            <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">Monthly Net Savings</p>
+            <h3 className="text-2xl font-heading font-bold text-foreground">{formatMoney(currentMonthSavings)}</h3>
             <p className="text-xs text-violet mb-4">This month</p>
             <div className="h-40">
               <ResponsiveContainer width="100%" height="100%">
@@ -49,35 +216,63 @@ const Savings = () => {
             </div>
           </div>
 
-          {/* Goals */}
           <div className="glass-card p-6 animate-fade-up-delay-1">
-            <div className="flex items-center gap-2 mb-5">
-              <Target className="h-5 w-5 text-violet" />
-              <p className="text-sm font-heading font-semibold text-foreground uppercase tracking-wider">Savings Goals</p>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Target className="h-5 w-5 text-violet" />
+                <p className="text-sm font-heading font-semibold text-foreground uppercase tracking-wider">Savings Goals</p>
+              </div>
+              <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => openAddDialog("goal")}>
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add Goal
+              </Button>
             </div>
+
             <div className="space-y-5">
-              {goals.map((goal) => {
-                const pct = Math.round((goal.current / goal.target) * 100);
-                return (
-                  <div key={goal.name}>
-                    <div className="flex justify-between mb-2">
-                      <span className="text-sm text-foreground">{goal.name}</span>
-                      <span className="text-xs text-muted-foreground">${goal.current.toLocaleString()} / ${goal.target.toLocaleString()}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div className={`h-full rounded-full ${goal.color} transition-all duration-700`} style={{ width: `${pct}%` }} />
-                    </div>
+              {actualGoals.length === 0 && (
+                <div className="text-center py-4 text-sm text-muted-foreground border border-dashed border-border rounded-xl">
+                  No saving goals yet
+                </div>
+              )}
+              {actualGoals.map(goal => renderGoalRow(goal, "bg-violet"))}
+            </div>
+
+            <div className="flex items-center justify-between mb-5 mt-8 border-t border-border/30 pt-6">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-coral" />
+                <p className="text-sm font-heading font-semibold text-foreground uppercase tracking-wider">Investments</p>
+              </div>
+              <Button size="sm" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => openAddDialog("investment")}>
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add Investment
+              </Button>
+            </div>
+
+            <div className="space-y-5">
+              {actualInvestments.length === 0 && (
+                <div className="text-center py-4 text-sm text-muted-foreground border border-dashed border-border rounded-xl">
+                  No investments yet
+                </div>
+              )}
+              {actualInvestments.length > 0 && (
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm text-foreground">Tracked Investment Progress</span>
+                    <span className="text-xs text-muted-foreground">{formatMoney(totalInvestmentCurrent)} / {formatMoney(totalInvestmentTarget)}</span>
                   </div>
-                );
-              })}
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-coral transition-all duration-700" style={{ width: `${totalInvestmentPct}%` }} />
+                  </div>
+                </div>
+              )}
+              {investmentProgress.map(goal => renderGoalRow(goal, "bg-coral"))}
             </div>
           </div>
 
-          {/* AI Recommendations */}
           <div className="glass-card card-glow-violet p-6 lg:col-span-2 animate-fade-up-delay-2">
             <div className="flex items-center gap-2 mb-4">
               <Sparkles className="h-5 w-5 text-violet" />
-              <p className="text-sm font-heading font-semibold text-foreground uppercase tracking-wider">AI Recommendations</p>
+              <p className="text-sm font-heading font-semibold text-foreground uppercase tracking-wider">Insights</p>
             </div>
             <div className="space-y-3">
               {tips.map((tip, i) => (
@@ -92,6 +287,44 @@ const Savings = () => {
           </div>
         </div>
       </div>
+
+      <Dialog open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) resetGoalForm(); }}>
+        <DialogContent className="glass-card border-border" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="font-heading uppercase tracking-wider">{editingGoal ? "Edit" : "Add"} {category === "goal" ? "Goal" : "Investment"}</DialogTitle>
+            <DialogDescription>Enter the details for your {category}.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label>Type</Label>
+              <Select value={category} onValueChange={(v: "goal" | "investment") => setCategory(v)}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="goal">Savings Goal</SelectItem>
+                  <SelectItem value="investment">Investment</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Name</Label>
+              <Input placeholder="e.g. Emergency Fund, Stocks" value={name} onChange={(e) => setName(e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label>Target Amount</Label>
+              <Input type="number" placeholder="0.00" value={targetAmount} onChange={(e) => setTargetAmount(e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label>Current Amount</Label>
+              <Input type="number" placeholder="0.00" value={currentAmount} onChange={(e) => setCurrentAmount(e.target.value)} className="mt-1" />
+            </div>
+            <Button onClick={handleSaveGoal} className="w-full bg-violet hover:bg-violet/90 text-white">
+              {editingGoal ? "Save" : "Add"} {category === "goal" ? "Goal" : "Investment"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };

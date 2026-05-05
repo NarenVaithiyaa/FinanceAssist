@@ -1,9 +1,9 @@
-import { LayoutDashboard, Receipt, TrendingUp, PiggyBank, BarChart3, Settings } from "lucide-react";
+import { LayoutDashboard, IndianRupee, TrendingUp, PiggyBank, BarChart3, Settings } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Receipt, label: "Expenses", path: "/expenses" },
+  { icon: IndianRupee, label: "Expenses", path: "/expenses" },
   { icon: TrendingUp, label: "Income", path: "/income" },
   { icon: PiggyBank, label: "Savings", path: "/savings" },
   { icon: Settings, label: "Settings", path: "/settings" },

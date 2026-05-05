@@ -7,7 +7,7 @@ import CategoryMapCard from "@/components/dashboard/CategoryMapCard";
 import AICoachPanel from "@/components/dashboard/AICoachPanel";
 import AccountBalances from "@/components/dashboard/AccountBalances";
 
-import { useFinancial } from "@/lib/FinancialContext";
+import { useFinancial } from "@/context/FinancialContext";
 
 const Index = () => {
   const { profile } = useFinancial();
