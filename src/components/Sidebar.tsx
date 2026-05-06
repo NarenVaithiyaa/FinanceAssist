@@ -14,8 +14,8 @@ const Sidebar = () => {
 
   return (
     <aside className="hidden md:flex fixed left-0 top-0 h-screen w-[72px] flex-col items-center py-6 z-50 bg-background border-r border-border transition-colors duration-300">
-      <div className="mb-8 flex h-10 w-10 items-center justify-center rounded-2xl gradient-coral">
-        <span className="font-heading text-sm font-bold text-white">PW</span>
+      <div className="mb-8 flex h-10 w-10 items-center justify-center rounded-2xl overflow-hidden">
+        <img src="/logo.png" alt="PennyW₹se Logo" className="h-full w-full object-cover" />
       </div>
 
       <nav className="flex flex-1 flex-col items-center gap-2">

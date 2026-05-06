@@ -80,7 +80,10 @@ const Auth = () => {
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tighter uppercase">PennyWise</h1>
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl overflow-hidden">
+            <img src="/logo.png" alt="PennyW₹se Logo" className="h-full w-full object-cover" />
+          </div>
+          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tighter uppercase">PennyW₹se</h1>
           <p className="text-muted-foreground">Your personal finance assistant</p>
         </div>
         
