@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["logo.png"],
+      includeAssets: ["logo_pwa.png"],
       manifest: {
         name: "PennyWise",
         short_name: "PennyWise",
@@ -31,19 +31,19 @@ export default defineConfig(({ mode }) => ({
         categories: ["finance", "productivity"],
         icons: [
           {
-            src: "/logo.png",
+            src: "/logo_pwa.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "/logo.png",
+            src: "/logo_pwa.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "/logo.png",
+            src: "/logo_pwa.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
