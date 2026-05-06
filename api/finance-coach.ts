@@ -1,3 +1,5 @@
+import { createClient } from "@supabase/supabase-js";
+
 const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
 const systemInstruction = `You are PennyWise AI Finance Coach.
@@ -16,6 +18,7 @@ type CoachMessage = {
 type ApiRequest = {
   method?: string;
   body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
 };
 
 type ApiResponse = {
@@ -83,20 +86,57 @@ Financial snapshot JSON:
 ${JSON.stringify(financialData)}`;
 };
 
+// In-memory rate limiting (simple IP/token based could go here, but keeping it simple with global cap)
+let recentRequests = 0;
+setInterval(() => { recentRequests = Math.max(0, recentRequests - 10); }, 60000); // 10 req/min cooldown reduction
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") {
     return sendJson(res, 405, { error: "Method not allowed" });
   }
 
+  // Lightweight DDOS/Spam protection
+  recentRequests++;
+  if (recentRequests > 50) {
+    return sendJson(res, 429, { error: "Too many requests. Please try again later." });
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!apiKey) {
-    return sendJson(res, 500, { error: "Gemini API key is not configured." });
+  if (!apiKey || !supabaseUrl || !supabaseKey) {
+    console.error("API configuration is missing.");
+    return sendJson(res, 500, { error: "Server configuration error." });
+  }
+
+  // JWT Verification
+  const authHeader = req.headers?.authorization || req.headers?.Authorization;
+  const token = typeof authHeader === "string" ? authHeader.replace("Bearer ", "").trim() : "";
+  const authHeaderArray = Array.isArray(authHeader) ? authHeader[0] : token;
+  const finalToken = typeof authHeaderArray === "string" ? authHeaderArray.replace("Bearer ", "").trim() : "";
+
+  if (!finalToken) {
+    return sendJson(res, 401, { error: "Unauthorized: Missing authentication token." });
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(finalToken);
+
+  if (authError || !user) {
+    console.error("Supabase Auth Error:", authError?.message);
+    return sendJson(res, 401, { error: "Unauthorized: Invalid token." });
   }
 
   try {
-    const body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) as RequestBody | undefined;
+    let body: RequestBody | undefined;
+    try {
+      body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) as RequestBody | undefined;
+    } catch (e) {
+      return sendJson(res, 400, { error: "Invalid JSON body." });
+    }
+    
     const mode = body?.mode === "savings-suggestions" ? "savings-suggestions" : "chat";
     const prompt = String(body?.prompt || "").trim();
     const messages = Array.isArray(body?.messages) ? body.messages.slice(-8) : [];
@@ -106,8 +146,19 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return sendJson(res, 400, { error: "Financial data is required." });
     }
 
-    if (mode === "chat" && !prompt) {
-      return sendJson(res, 400, { error: "Prompt is required." });
+    // Safety checks for abuse prevention
+    const financialDataString = JSON.stringify(financialData);
+    if (financialDataString.length > 50000) { // Limit payload size (~50KB)
+      return sendJson(res, 413, { error: "Financial data is too large." });
+    }
+
+    if (mode === "chat") {
+      if (!prompt) {
+        return sendJson(res, 400, { error: "Prompt is required." });
+      }
+      if (prompt.length > 1000) { // Cap prompt length
+        return sendJson(res, 413, { error: "Prompt exceeds 1000 characters." });
+      }
     }
 
     const contents = [
@@ -115,7 +166,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         .filter(isCoachMessage)
         .map((message) => ({
           role: toGeminiRole(message.role),
-          parts: [{ text: String(message.content).slice(0, 2000) }],
+          parts: [{ text: String(message.content).slice(0, 1000) }], // Limit history text size
         })),
       {
         role: "user",
@@ -137,7 +188,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         generationConfig: {
           temperature: mode === "savings-suggestions" ? 0.35 : 0.45,
           topP: 0.9,
-          maxOutputTokens: mode === "savings-suggestions" ? 450 : 900,
+          maxOutputTokens: mode === "savings-suggestions" ? 450 : 800, // Capped output tokens
         },
       }),
     });
@@ -145,8 +196,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const geminiBody = await geminiResponse.json() as GeminiResponseBody;
 
     if (!geminiResponse.ok) {
+      console.error("Gemini API Error:", geminiBody);
       return sendJson(res, geminiResponse.status, {
-        error: geminiBody?.error?.message || "Gemini request failed.",
+        error: "AI service failed to process request.",
       });
     }
 
@@ -159,8 +211,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       text: text || "I could not generate a response from the provided financial data.",
     });
   } catch (error: unknown) {
+    console.error("Internal API Error:", error);
     return sendJson(res, 500, {
-      error: error instanceof Error ? error.message : "AI finance coach failed.",
+      error: "AI finance coach experienced an internal error.",
     });
   }
 }

@@ -4,12 +4,14 @@ import { useTheme } from "next-themes";
 import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { toast } from "sonner";
 
 const SettingsPage = () => {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const { signOut } = useAuth();
+  const { isInstallable, promptInstall } = usePWAInstall();
 
   const handleLogout = async () => {
     await signOut();
@@ -55,7 +57,19 @@ const SettingsPage = () => {
         </button>
       ) 
     },
-    { icon: Download, label: "Install App", description: "Add PennyWise to your home screen", action: <button className="chip hover:bg-muted/80 transition-colors btn-press">Install</button> },
+    ...(isInstallable ? [{ 
+      icon: Download, 
+      label: "Install App", 
+      description: "Add PennyWise to your home screen", 
+      action: (
+        <button 
+          onClick={promptInstall}
+          className="chip hover:bg-muted/80 transition-colors btn-press bg-primary text-primary-foreground"
+        >
+          Install
+        </button>
+      ) 
+    }] : []),
     { 
       icon: LogOut, 
       label: "Log Out", 

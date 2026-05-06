@@ -9,8 +9,15 @@ lerna-debug.log*
 
 node_modules
 .env
+.env.*
+!.env.example
+
 dist
 dist-ssr
+build/
+.vite/
+.cache/
+.eslintcache
 *.local
 
 # Editor directories and files

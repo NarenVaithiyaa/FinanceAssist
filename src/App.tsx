@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { FinancialProvider } from "./context/FinancialContext";
+import { useOnlineStatus } from "./hooks/useOnlineStatus";
+import { WifiOff } from "lucide-react";
 import Index from "./pages/Index";
 import Expenses from "./pages/Expenses";
 import Income from "./pages/Income";
@@ -36,12 +38,26 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const OfflineBanner = () => {
+  const isOnline = useOnlineStatus();
+
+  if (isOnline) return null;
+
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 bg-destructive text-destructive-foreground px-4 py-2 flex items-center justify-center text-sm font-medium shadow-md animate-in slide-in-from-top">
+      <WifiOff className="w-4 h-4 mr-2" />
+      You are offline. Some features may be unavailable.
+    </div>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <FinancialProvider>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <TooltipProvider>
+            <OfflineBanner />
             <Toaster />
             <Sonner />
             <BrowserRouter>

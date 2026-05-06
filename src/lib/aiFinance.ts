@@ -168,16 +168,22 @@ export const buildFinancialSnapshot = ({
   };
 };
 
+import { supabase } from "./supabase";
+
 export const requestFinanceCoach = async (payload: {
   mode: "chat" | "savings-suggestions";
   prompt: string;
   financialData: FinancialSnapshot;
   messages?: CoachMessage[];
 }) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
   const response = await fetch("/api/finance-coach", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(payload),
   });
