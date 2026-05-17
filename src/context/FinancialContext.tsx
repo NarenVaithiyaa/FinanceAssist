@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback,
 import { AccountBalances, getAccountBalances, updateBalances } from "@/services/accounts";
 import { Transaction, getTransactions, addTransaction as serviceAddTransaction, deleteTransaction as serviceDeleteTransaction } from "@/services/transactions";
 import { Budget, SavingsGoal, getBudgets, upsertBudget as serviceUpsertBudget, getSavingsGoals, addSavingsGoal as serviceAddGoal, updateSavingsGoal as serviceUpdateGoal, deleteSavingsGoal as serviceDeleteGoal } from "@/services/goals"; // Use goals.ts directly
-import { EMI, getEMIs, addEMI as serviceAddEMI, deleteEMI as serviceDeleteEMI } from "@/services/emis";
+import { EMI, getEMIs, addEMI as serviceAddEMI, updateEMI as serviceUpdateEMI, deleteEMI as serviceDeleteEMI } from "@/services/emis";
 import { useAuth } from "./AuthContext";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -41,6 +41,7 @@ interface FinancialContextType {
   updateSavingsGoal: (id: string, updates: Partial<SavingsGoal>) => Promise<void>;
   deleteSavingsGoal: (id: string) => Promise<void>;
   addEMI: (emi: Omit<EMI, "id" | "user_id" | "created_at">) => Promise<void>;
+  updateEMI: (id: string, updates: Partial<EMI>) => Promise<void>;
   deleteEMI: (id: string) => Promise<void>;
 }
 
@@ -275,6 +276,16 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
       throw error;
     }
   };
+  const updateEMI = async (id: string, updates: Partial<EMI>) => {
+    try {
+      const updatedEMI = await serviceUpdateEMI(id, updates);
+      setEmis(prev => prev.map(e => e.id === id ? updatedEMI : e));
+      toast.success("EMI updated successfully!");
+    } catch (error: any) {
+      toast.error("Failed to update EMI: " + error.message);
+      throw error;
+    }
+  };
 
   const deleteEMI = async (id: string) => {
     try {
@@ -295,7 +306,7 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
       updateBalance,
       upsertBudget,
       addSavingsGoal, updateSavingsGoal, deleteSavingsGoal,
-      addEMI, deleteEMI
+      addEMI, updateEMI, deleteEMI
     }}>
       {children}
     </FinancialContext.Provider>

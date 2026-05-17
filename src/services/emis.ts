@@ -40,6 +40,22 @@ export const addEMI = async (emi: Omit<EMI, 'id' | 'user_id' | 'created_at'>) =>
   return data as EMI;
 };
 
+export const updateEMI = async (id: string, updates: Partial<EMI>) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+
+  const { data, error } = await supabase
+    .from('emis')
+    .update(updates)
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as EMI;
+};
+
 export const deleteEMI = async (id: string) => {
   const { error } = await supabase
     .from('emis')

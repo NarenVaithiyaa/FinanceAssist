@@ -188,7 +188,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         generationConfig: {
           temperature: mode === "savings-suggestions" ? 0.35 : 0.45,
           topP: 0.9,
-          maxOutputTokens: mode === "savings-suggestions" ? 450 : 800, // Capped output tokens
+          maxOutputTokens: mode === "savings-suggestions" ? 1024 : 2048,
         },
       }),
     });

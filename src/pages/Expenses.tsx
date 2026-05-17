@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import Layout from "@/components/Layout";
-import { Search, Filter, Trash2, Utensils, Gamepad2, MoreHorizontal, Plus, GraduationCap, Users, Heart, User, CreditCard, Calendar as CalendarIcon, Zap, TrendingUp } from "lucide-react";
+import { Search, Filter, Trash2, Utensils, Gamepad2, MoreHorizontal, Plus, GraduationCap, Users, Heart, User, CreditCard, Calendar as CalendarIcon, Zap, TrendingUp, Edit2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +31,7 @@ type ExpenseCategory = keyof typeof categoryConfig;
 const allCategories: ExpenseCategory[] = ["Education", "Entertainment", "Food", "Friends", "Health", "Investment", "Personal", "Others"];
 
 const Expenses = () => {
-  const { accounts, transactions, budgets, upsertBudget, processTransaction, deleteTransaction, emis, addEMI, deleteEMI, loading } = useFinancial();
+  const { accounts, transactions, budgets, upsertBudget, processTransaction, deleteTransaction, emis, addEMI, updateEMI, deleteEMI, loading } = useFinancial();
   const [open, setOpen] = useState(false);
   const [filterCategory, setFilterCategory] = useState<ExpenseCategory | "All">("All");
   const [amount, setAmount] = useState("");
@@ -55,6 +55,7 @@ const Expenses = () => {
   }, [transactions]);
 
   const [emiOpen, setEmiOpen] = useState(false);
+  const [editingEmiId, setEditingEmiId] = useState<string | null>(null);
   const [emiName, setEmiName] = useState("");
   const [emiPrincipal, setEmiPrincipal] = useState("");
   const [emiMonths, setEmiMonths] = useState("");
@@ -113,6 +114,34 @@ const Expenses = () => {
     }
   };
 
+  const handleDeleteEMIParams = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this EMI?")) {
+      await deleteEMI(id);
+    }
+  };
+
+  const openAddEmi = () => {
+    setEditingEmiId(null);
+    setEmiName("");
+    setEmiPrincipal("");
+    setEmiMonths("");
+    setEmiAmountEachMonth("");
+    setEmiInterest("");
+    setEmiStartDate(new Date());
+    setEmiOpen(true);
+  };
+
+  const openEditEmi = (emi: any) => {
+    setEditingEmiId(emi.id);
+    setEmiName(emi.name);
+    setEmiPrincipal(emi.principal.toString());
+    setEmiMonths(emi.months.toString());
+    setEmiAmountEachMonth(emi.emi_amount.toString());
+    setEmiInterest(emi.interest_rate?.toString() || "");
+    setEmiStartDate(typeof emi.start_date === 'string' ? parseISO(emi.start_date) : new Date(emi.start_date));
+    setEmiOpen(true);
+  };
+
   const handleAddEMI = async () => {
     if (!emiName || !emiPrincipal || !emiMonths || !emiAmountEachMonth || !emiStartDate) return;
     const principal = parseFloat(emiPrincipal);
@@ -126,15 +155,27 @@ const Expenses = () => {
     }
 
     try {
-      await addEMI({
-        name: emiName,
-        principal,
-        months,
-        emi_amount: emiAmount,
-        interest_rate: interestRate,
-        start_date: format(emiStartDate, "yyyy-MM-dd"),
-      });
+      if (editingEmiId) {
+        await updateEMI(editingEmiId, {
+          name: emiName,
+          principal,
+          months,
+          emi_amount: emiAmount,
+          interest_rate: interestRate,
+          start_date: format(emiStartDate, "yyyy-MM-dd"),
+        });
+      } else {
+        await addEMI({
+          name: emiName,
+          principal,
+          months,
+          emi_amount: emiAmount,
+          interest_rate: interestRate,
+          start_date: format(emiStartDate, "yyyy-MM-dd"),
+        });
+      }
       setEmiOpen(false);
+      setEditingEmiId(null);
       setEmiName("");
       setEmiPrincipal("");
       setEmiMonths("");
@@ -322,13 +363,21 @@ const Expenses = () => {
                           <div>
                             <Progress value={progress.monthProgress} className="h-2 bg-muted" indicatorClassName={progress.isCompleted ? "bg-mint" : "bg-coral"} />
                           </div>
+                          <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-border/50">
+                            <Button variant="ghost" size="sm" onClick={() => openEditEmi(emi)} className="h-8 hover:bg-muted">
+                              <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteEMIParams(emi.id!)} className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                              <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-              <Button onClick={() => setEmiOpen(true)} className="w-full bg-muted hover:bg-muted/80 text-foreground border border-border/50 h-12 rounded-2xl font-medium"><Plus className="mr-2 h-4 w-4" /> Add New EMI</Button>
+              <Button onClick={openAddEmi} className="w-full bg-muted hover:bg-muted/80 text-foreground border border-border/50 h-12 rounded-2xl font-medium"><Plus className="mr-2 h-4 w-4" /> Add New EMI</Button>
             </div>
           </TabsContent>
         </Tabs>
@@ -406,12 +455,12 @@ const Expenses = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Add EMI Dialog */}
+        {/* Add/Edit EMI Dialog */}
         <Dialog open={emiOpen} onOpenChange={setEmiOpen}>
           <DialogContent className="glass-card border-border" onPointerDownOutside={(e) => e.preventDefault()}>
             <DialogHeader>
-              <DialogTitle className="font-heading uppercase tracking-wider">Add EMI Tracker</DialogTitle>
-              <DialogDescription>Track your monthly installments.</DialogDescription>
+              <DialogTitle className="font-heading uppercase tracking-wider">{editingEmiId ? "Edit EMI Tracker" : "Add EMI Tracker"}</DialogTitle>
+              <DialogDescription>{editingEmiId ? "Update your monthly installment details." : "Track your monthly installments."}</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-2">
               <div>
@@ -452,7 +501,7 @@ const Expenses = () => {
                   </PopoverContent>
                 </Popover>
               </div>
-              <Button onClick={handleAddEMI} className="w-full bg-coral hover:bg-coral/90 text-white">Start Tracking</Button>
+              <Button onClick={handleAddEMI} className="w-full bg-coral hover:bg-coral/90 text-white">{editingEmiId ? "Save Changes" : "Start Tracking"}</Button>
             </div>
           </DialogContent>
         </Dialog>
