@@ -168,7 +168,7 @@ export const buildFinancialSnapshot = ({
   };
 };
 
-import { supabase } from "./supabase";
+import { api } from '@/services/api';
 
 export const requestFinanceCoach = async (payload: {
   mode: "chat" | "savings-suggestions";
@@ -176,25 +176,13 @@ export const requestFinanceCoach = async (payload: {
   financialData: FinancialSnapshot;
   messages?: CoachMessage[];
 }) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-
-  const response = await fetch("/api/finance-coach", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(payload),
+  // The backend securely constructs the financial snapshot server-side.
+  // We only need to provide the prompt/question.
+  const response = await api.post<{ answer: string }>('ai/coach', {
+    question: payload.prompt,
   });
 
-  const body = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(body.error || "AI finance coach is unavailable right now.");
-  }
-
-  return String(body.text || "").trim();
+  return response.answer;
 };
 
 export const splitSuggestionText = (text: string) => {

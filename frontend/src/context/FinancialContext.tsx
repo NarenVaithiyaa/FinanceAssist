@@ -1,12 +1,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from "react";
 import { AccountBalances, getAccountBalances, updateBalances } from "@/services/accounts";
 import { Transaction, getTransactions, addTransaction as serviceAddTransaction, deleteTransaction as serviceDeleteTransaction } from "@/services/transactions";
-import { Budget, SavingsGoal, getBudgets, upsertBudget as serviceUpsertBudget, getSavingsGoals, addSavingsGoal as serviceAddGoal, updateSavingsGoal as serviceUpdateGoal, deleteSavingsGoal as serviceDeleteGoal } from "@/services/goals"; // Use goals.ts directly
+import { Budget, SavingsGoal, getBudgets, upsertBudget as serviceUpsertBudget, getSavingsGoals, addSavingsGoal as serviceAddGoal, updateSavingsGoal as serviceUpdateGoal, deleteSavingsGoal as serviceDeleteGoal } from "@/services/goals";
 import { EMI, getEMIs, addEMI as serviceAddEMI, updateEMI as serviceUpdateEMI, deleteEMI as serviceDeleteEMI } from "@/services/emis";
+import { getProfile as serviceGetProfile, updateProfile as serviceUpdateProfile } from "@/services/profile";
 import { useAuth } from "./AuthContext";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { supabase } from "@/lib/supabase";
 
 export interface Profile {
   name: string;
@@ -50,7 +50,7 @@ const FinancialContext = createContext<FinancialContextType | undefined>(undefin
 export const FinancialProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   const [profile, setProfile] = useState<Profile>({
-    name: user?.user_metadata?.full_name || "User",
+    name: "User",
     email: user?.email || "",
     bio: "",
     avatar: ""
@@ -68,30 +68,20 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
     { id: "wallet", name: "Personal Wallet", type: "wallet" as const, balance: balances?.wallet || 0 }
   ], [balances]);
 
-  // Load user profile from auth metadata
-  useEffect(() => {
-    if (user?.user_metadata) {
-      setProfile({
-        name: user.user_metadata.full_name || "User",
-        email: user.email || "",
-        bio: user.user_metadata.bio || "",
-        avatar: user.user_metadata.avatar_url || ""
-      });
-    }
-  }, [user]);
-
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) return;
     try {
-      const { data, error } = await supabase.auth.updateUser({
-        data: {
-          full_name: updates.name,
-          bio: updates.bio,
-          avatar_url: updates.avatar
-        }
+      const updated = await serviceUpdateProfile({
+        full_name: updates.name,
+        bio: updates.bio,
+        avatar_url: updates.avatar,
       });
-      if (error) throw error;
-      setProfile(prev => ({ ...prev, ...updates }));
+      setProfile({
+        name: updated.full_name || "User",
+        email: updated.email || user.email || "",
+        bio: updated.bio || "",
+        avatar: updated.avatar_url || "",
+      });
       toast.success("Profile saved securely!");
     } catch (e: any) {
       toast.error("Failed to update profile: " + e.message);
@@ -113,6 +103,10 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
     try {
       const currentMonth = format(new Date(), "yyyy-MM");
       
+      const profilePromise = serviceGetProfile().catch(e => {
+        console.error("Failed to fetch profile", e);
+        return null;
+      });
       const balancesPromise = getAccountBalances().catch(e => {
         console.error("Failed to fetch balances", e);
         return { bank: 0, wallet: 0 };
@@ -131,11 +125,11 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
       });
       const emisPromise = getEMIs().catch(e => {
         console.error("Failed to fetch emis", e);
-        toast.error("EMI table missing in database. Please run SQL setup script.");
         return [];
       });
 
-      const [balancesData, transactionsData, budgetsData, goalsData, emisData] = await Promise.all([
+      const [profileData, balancesRaw, transactionsRaw, budgetsRaw, goalsRaw, emisRaw] = await Promise.all([
+        profilePromise,
         balancesPromise,
         transactionsPromise,
         budgetsPromise,
@@ -143,6 +137,20 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
         emisPromise
       ]);
 
+      const balancesData = balancesRaw ? { ...balancesRaw, bank: Number(balancesRaw.bank), wallet: Number(balancesRaw.wallet) } : null;
+      const transactionsData = transactionsRaw.map(t => ({ ...t, amount: Number(t.amount) }));
+      const budgetsData = budgetsRaw.map(b => ({ ...b, limit_amount: Number(b.limit_amount) }));
+      const goalsData = goalsRaw.map(g => ({ ...g, target_amount: Number(g.target_amount), current_amount: Number(g.current_amount) }));
+      const emisData = emisRaw.map(e => ({ ...e, principal: Number(e.principal), emi_amount: Number(e.emi_amount), interest_rate: Number(e.interest_rate) }));
+
+      if (profileData) {
+        setProfile({
+          name: profileData.full_name || "User",
+          email: profileData.email || user.email || "",
+          bio: profileData.bio || "",
+          avatar: profileData.avatar_url || "",
+        });
+      }
       setBalances(balancesData);
       setTransactions(transactionsData);
       setBudgets(budgetsData);
@@ -161,7 +169,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
 
   const processTransaction = async (transactionData: Omit<Transaction, "id" | "user_id" | "created_at" | "updated_at">) => {
     try {
-      const newTransaction = await serviceAddTransaction(transactionData);
+      const rawTx = await serviceAddTransaction(transactionData);
+      const newTransaction = { ...rawTx, amount: Number(rawTx.amount) };
       setTransactions(prev => [newTransaction, ...prev]);
       
       const type = transactionData.type === 'expense' ? transactionData.source : transactionData.destination;
@@ -171,7 +180,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
           ? currentBalance + transactionData.amount 
           : currentBalance - transactionData.amount;
         
-        const updated = await updateBalances({ [type]: newBalance });
+        const rawUpdated = await updateBalances({ [type]: newBalance });
+        const updated = { ...rawUpdated, bank: Number(rawUpdated.bank), wallet: Number(rawUpdated.wallet) };
         setBalances(updated);
       }
       
@@ -197,7 +207,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
           ? currentBalance - tToDelete.amount
           : currentBalance + tToDelete.amount;
 
-        const updated = await updateBalances({ [type]: newBalance });
+        const rawUpdated = await updateBalances({ [type]: newBalance });
+        const updated = { ...rawUpdated, bank: Number(rawUpdated.bank), wallet: Number(rawUpdated.wallet) };
         setBalances(updated);
       }
 
@@ -209,7 +220,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
 
   const updateBalance = async (type: "bank" | "wallet", amount: number) => {
     try {
-      const updated = await updateBalances({ [type]: amount });
+      const rawUpdated = await updateBalances({ [type]: amount });
+      const updated = { ...rawUpdated, bank: Number(rawUpdated.bank), wallet: Number(rawUpdated.wallet) };
       setBalances(updated);
       toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} balance updated`);
     } catch (error: any) {
@@ -221,7 +233,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
   const upsertBudget = async (limit_amount: number, category: string = "Total") => {
     try {
       const month = format(new Date(), "yyyy-MM");
-      const newBudget = await serviceUpsertBudget({ category, limit_amount, month });
+      const rawBudget = await serviceUpsertBudget({ category, limit_amount, month });
+      const newBudget = { ...rawBudget, limit_amount: Number(rawBudget.limit_amount) };
       setBudgets(prev => {
         const filtered = prev.filter(b => b.category !== category || b.month !== month);
         return [...filtered, newBudget];
@@ -235,7 +248,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
 
   const addSavingsGoal = async (goal: Omit<SavingsGoal, "id" | "user_id">) => {
     try {
-      const newGoal = await serviceAddGoal(goal);
+      const rawGoal = await serviceAddGoal(goal);
+      const newGoal = { ...rawGoal, target_amount: Number(rawGoal.target_amount), current_amount: Number(rawGoal.current_amount) };
       setSavingsGoals(prev => [...prev, newGoal]);
       toast.success("Savings goal added");
     } catch (error: any) {
@@ -246,7 +260,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
 
   const updateSavingsGoal = async (id: string, updates: Partial<SavingsGoal>) => {
     try {
-      const updatedGoal = await serviceUpdateGoal(id, updates);
+      const rawGoal = await serviceUpdateGoal(id, updates);
+      const updatedGoal = { ...rawGoal, target_amount: Number(rawGoal.target_amount), current_amount: Number(rawGoal.current_amount) };
       setSavingsGoals(prev => prev.map(g => g.id === id ? updatedGoal : g));
       toast.success("Goal updated");
     } catch (error: any) {
@@ -268,7 +283,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
 
   const addEMI = async (emi: Omit<EMI, "id" | "user_id" | "created_at">) => {
     try {
-      const newEMI = await serviceAddEMI(emi);
+      const rawEMI = await serviceAddEMI(emi);
+      const newEMI = { ...rawEMI, principal: Number(rawEMI.principal), emi_amount: Number(rawEMI.emi_amount), interest_rate: Number(rawEMI.interest_rate) };
       setEmis(prev => [...prev, newEMI]);
       toast.success("EMI scheduled successfully!");
     } catch (error: any) {
@@ -278,7 +294,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
   };
   const updateEMI = async (id: string, updates: Partial<EMI>) => {
     try {
-      const updatedEMI = await serviceUpdateEMI(id, updates);
+      const rawEMI = await serviceUpdateEMI(id, updates);
+      const updatedEMI = { ...rawEMI, principal: Number(rawEMI.principal), emi_amount: Number(rawEMI.emi_amount), interest_rate: Number(rawEMI.interest_rate) };
       setEmis(prev => prev.map(e => e.id === id ? updatedEMI : e));
       toast.success("EMI updated successfully!");
     } catch (error: any) {
