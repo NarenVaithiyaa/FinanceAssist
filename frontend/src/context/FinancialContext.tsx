@@ -187,7 +187,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
 
       if (transactionData.type === 'expense' && (transactionData.category === 'Savings' || transactionData.category === 'Investment')) {
         const goalName = (transactionData.description || "").trim().toLowerCase();
-        const goalToUpdate = savingsGoals.find(g => g.name.trim().toLowerCase() === goalName);
+        const targetCategory = transactionData.category === 'Savings' ? 'goal' : 'investment';
+        const goalToUpdate = savingsGoals.find(g => g.name.trim().toLowerCase() === goalName && g.category === targetCategory);
         if (goalToUpdate) {
            const newAmount = Number(goalToUpdate.current_amount) + Number(transactionData.amount);
            await updateSavingsGoal(goalToUpdate.id, { current_amount: newAmount });
@@ -223,7 +224,8 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
 
       if (tToDelete.type === 'expense' && (tToDelete.category === 'Savings' || tToDelete.category === 'Investment')) {
         const goalName = (tToDelete.description || "").trim().toLowerCase();
-        const goalToUpdate = savingsGoals.find(g => g.name.trim().toLowerCase() === goalName);
+        const targetCategory = tToDelete.category === 'Savings' ? 'goal' : 'investment';
+        const goalToUpdate = savingsGoals.find(g => g.name.trim().toLowerCase() === goalName && g.category === targetCategory);
         if (goalToUpdate) {
            const newAmount = Math.max(0, Number(goalToUpdate.current_amount) - Number(tToDelete.amount));
            await updateSavingsGoal(goalToUpdate.id, { current_amount: newAmount });
