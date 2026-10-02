@@ -62,8 +62,19 @@ async function fetchClient<T>(endpoint: string, options: RequestInit = {}): Prom
   }
 
   if (!response.ok) {
+    let errorMessage = 'An API error occurred';
+    if (data?.detail) {
+      if (typeof data.detail === 'string') {
+        errorMessage = data.detail;
+      } else if (Array.isArray(data.detail)) {
+        errorMessage = data.detail.map((err: any) => err.msg || JSON.stringify(err)).join(', ');
+      }
+    } else if (response.statusText) {
+      errorMessage = response.statusText;
+    }
+
     throw new APIError(
-      data?.detail || response.statusText || 'An API error occurred',
+      errorMessage,
       response.status,
       data
     );
