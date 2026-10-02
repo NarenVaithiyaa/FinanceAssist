@@ -163,6 +163,30 @@ const Savings = () => {
     });
   }, [actualInvestments, investmentExpensesByName]);
 
+  const savingsExpensesByName = useMemo(() => {
+    return transactions
+      .filter(t => t.type === "expense" && t.category === "Savings")
+      .reduce<Record<string, number>>((totals, transaction) => {
+        const key = normalizeInvestmentName(transaction.description || "");
+        if (!key) return totals;
+
+        totals[key] = (totals[key] || 0) + transaction.amount;
+        return totals;
+      }, {});
+  }, [transactions]);
+
+  const goalsProgress = useMemo(() => {
+    return actualGoals.map(goal => {
+      const baseAmount = Number(goal.current_amount) || 0;
+      const matchedExpenseAmount = savingsExpensesByName[normalizeInvestmentName(goal.name)] || 0;
+
+      return {
+        ...goal,
+        displayCurrentAmount: baseAmount + matchedExpenseAmount,
+      };
+    });
+  }, [actualGoals, savingsExpensesByName]);
+
   const totalInvestmentCurrent = investmentProgress.reduce((sum, goal) => sum + goal.displayCurrentAmount, 0);
   const totalInvestmentTarget = actualInvestments.reduce((sum, goal) => sum + Number(goal.target_amount), 0);
   const totalInvestmentPct = totalInvestmentTarget > 0
@@ -289,12 +313,12 @@ const Savings = () => {
             </div>
 
             <div className="space-y-5">
-              {actualGoals.length === 0 && (
+              {goalsProgress.length === 0 && (
                 <div className="text-center py-4 text-sm text-muted-foreground border border-dashed border-border rounded-xl">
                   No saving goals yet
                 </div>
               )}
-              {actualGoals.map(goal => renderGoalRow(goal, "bg-violet"))}
+              {goalsProgress.map(goal => renderGoalRow(goal, "bg-violet"))}
             </div>
 
             <div className="flex items-center justify-between mb-5 mt-8 border-t border-border/30 pt-6">

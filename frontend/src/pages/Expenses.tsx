@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import Layout from "@/components/Layout";
-import { Search, Filter, Trash2, Utensils, Gamepad2, MoreHorizontal, Plus, GraduationCap, Users, Heart, User, CreditCard, Calendar as CalendarIcon, Zap, TrendingUp, Edit2 } from "lucide-react";
+import { Search, Filter, Trash2, Utensils, Gamepad2, MoreHorizontal, Plus, GraduationCap, Users, Heart, User, CreditCard, Calendar as CalendarIcon, Zap, TrendingUp, Edit2, Target } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,13 +22,14 @@ const categoryConfig = {
   Friends: { icon: Users, color: "bg-yellow" },
   Health: { icon: Heart, color: "bg-mint" },
   Investment: { icon: TrendingUp, color: "bg-coral" },
+  Savings: { icon: Target, color: "bg-violet" },
   Personal: { icon: User, color: "bg-soft-blue" },
   Others: { icon: MoreHorizontal, color: "bg-muted" },
 } as const;
 
 type ExpenseCategory = keyof typeof categoryConfig;
 
-const allCategories: ExpenseCategory[] = ["Education", "Entertainment", "Food", "Friends", "Health", "Investment", "Personal", "Others"];
+const allCategories: ExpenseCategory[] = ["Education", "Entertainment", "Food", "Friends", "Health", "Investment", "Savings", "Personal", "Others"];
 
 const Expenses = () => {
   const { accounts, transactions, budgets, upsertBudget, processTransaction, deleteTransaction, emis, addEMI, updateEMI, deleteEMI, loading } = useFinancial();
