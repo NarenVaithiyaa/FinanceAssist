@@ -11,8 +11,8 @@ class ResponseBase(BaseModel):
 # ----------------- Account Balances -----------------
 # We do not have a standard "Create" because Account Balances are typically upserted.
 class AccountBalanceUpdate(BaseModel):
-    bank: Decimal = Field(default=Decimal('0.0'), ge=0)
-    wallet: Decimal = Field(default=Decimal('0.0'), ge=0)
+    bank: Optional[Decimal] = Field(default=None, ge=0)
+    wallet: Optional[Decimal] = Field(default=None, ge=0)
 
 class AccountBalanceResponse(ResponseBase):
     id: UUID

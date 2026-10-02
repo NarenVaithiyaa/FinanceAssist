@@ -26,21 +26,24 @@ def upsert_balance(db: Session, balance_data: AccountBalanceUpdate, current_user
     """
     Performs an atomic PostgreSQL UPSERT to safely update or create the user's account balance.
     """
-    # 1. Build the base PostgreSQL INSERT statement
-    stmt = insert(AccountBalance).values(
-        user_id=current_user.id,
-        bank=balance_data.bank,
-        wallet=balance_data.wallet
-    )
+    # 1. Build the base PostgreSQL INSERT statement with defaults for new rows
+    insert_values = {
+        'user_id': current_user.id,
+        'bank': balance_data.bank if balance_data.bank is not None else 0.0,
+        'wallet': balance_data.wallet if balance_data.wallet is not None else 0.0,
+    }
+    stmt = insert(AccountBalance).values(**insert_values)
     
     # 2. Append the ON CONFLICT DO UPDATE clause targeting the unique user_id constraint
+    update_values = {'updated_at': func.now()}
+    if balance_data.bank is not None:
+        update_values['bank'] = balance_data.bank
+    if balance_data.wallet is not None:
+        update_values['wallet'] = balance_data.wallet
+
     upsert_stmt = stmt.on_conflict_do_update(
         index_elements=['user_id'],
-        set_={
-            'bank': stmt.excluded.bank,
-            'wallet': stmt.excluded.wallet,
-            'updated_at': func.now()
-        }
+        set_=update_values
     ).returning(AccountBalance)
     
     try:
