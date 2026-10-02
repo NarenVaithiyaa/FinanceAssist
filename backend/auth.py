@@ -24,9 +24,15 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     """
     token = credentials.credentials
     try:
+        # Create a fresh client per request to avoid thread-safety/concurrency issues
+        # with the shared synchronous httpx client under high concurrent load
+        temp_client: Client = create_client(
+            settings.SUPABASE_URL, 
+            settings.SUPABASE_SERVICE_ROLE_KEY.get_secret_value()
+        )
+        
         # Ask Supabase to validate the token and return the user details.
-        # This securely verifies the JWT signature and expiration against the live auth state.
-        auth_response = supabase.auth.get_user(token)
+        auth_response = temp_client.auth.get_user(token)
         user = auth_response.user
         
         if not user:
@@ -36,7 +42,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             id=UUID(user.id),
             email=user.email
         )
-    except Exception:
+    except Exception as e:
+        print(f"Auth Exception: {e}")
         # If token is expired, tampered with, or invalid, catch the error and return a clean 401.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

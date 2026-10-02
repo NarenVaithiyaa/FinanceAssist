@@ -184,6 +184,15 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
         const updated = { ...rawUpdated, bank: Number(rawUpdated.bank), wallet: Number(rawUpdated.wallet) };
         setBalances(updated);
       }
+
+      if (transactionData.type === 'expense' && (transactionData.category === 'Savings' || transactionData.category === 'Investment')) {
+        const goalName = (transactionData.description || "").trim().toLowerCase();
+        const goalToUpdate = savingsGoals.find(g => g.name.trim().toLowerCase() === goalName);
+        if (goalToUpdate) {
+           const newAmount = Number(goalToUpdate.current_amount) + Number(transactionData.amount);
+           await updateSavingsGoal(goalToUpdate.id, { current_amount: newAmount });
+        }
+      }
       
       toast.success(`${transactionData.type === "income" ? "Income" : "Expense"} added successfully`);
     } catch (error: any) {
@@ -210,6 +219,15 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
         const rawUpdated = await updateBalances({ [type]: newBalance });
         const updated = { ...rawUpdated, bank: Number(rawUpdated.bank), wallet: Number(rawUpdated.wallet) };
         setBalances(updated);
+      }
+
+      if (tToDelete.type === 'expense' && (tToDelete.category === 'Savings' || tToDelete.category === 'Investment')) {
+        const goalName = (tToDelete.description || "").trim().toLowerCase();
+        const goalToUpdate = savingsGoals.find(g => g.name.trim().toLowerCase() === goalName);
+        if (goalToUpdate) {
+           const newAmount = Math.max(0, Number(goalToUpdate.current_amount) - Number(tToDelete.amount));
+           await updateSavingsGoal(goalToUpdate.id, { current_amount: newAmount });
+        }
       }
 
       toast.success("Transaction deleted successfully");

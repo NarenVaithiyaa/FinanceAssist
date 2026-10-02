@@ -152,16 +152,11 @@ const Savings = () => {
   }, [transactions]);
 
   const investmentProgress = useMemo(() => {
-    return actualInvestments.map(goal => {
-      const baseAmount = Number(goal.current_amount) || 0;
-      const matchedExpenseAmount = investmentExpensesByName[normalizeInvestmentName(goal.name)] || 0;
-
-      return {
-        ...goal,
-        displayCurrentAmount: baseAmount + matchedExpenseAmount,
-      };
-    });
-  }, [actualInvestments, investmentExpensesByName]);
+    return actualInvestments.map(goal => ({
+      ...goal,
+      displayCurrentAmount: Number(goal.current_amount) || 0,
+    }));
+  }, [actualInvestments]);
 
   const savingsExpensesByName = useMemo(() => {
     return transactions
@@ -176,16 +171,11 @@ const Savings = () => {
   }, [transactions]);
 
   const goalsProgress = useMemo(() => {
-    return actualGoals.map(goal => {
-      const baseAmount = Number(goal.current_amount) || 0;
-      const matchedExpenseAmount = savingsExpensesByName[normalizeInvestmentName(goal.name)] || 0;
-
-      return {
-        ...goal,
-        displayCurrentAmount: baseAmount + matchedExpenseAmount,
-      };
-    });
-  }, [actualGoals, savingsExpensesByName]);
+    return actualGoals.map(goal => ({
+      ...goal,
+      displayCurrentAmount: Number(goal.current_amount) || 0,
+    }));
+  }, [actualGoals]);
 
   const totalInvestmentCurrent = investmentProgress.reduce((sum, goal) => sum + goal.displayCurrentAmount, 0);
   const totalInvestmentTarget = actualInvestments.reduce((sum, goal) => sum + Number(goal.target_amount), 0);
