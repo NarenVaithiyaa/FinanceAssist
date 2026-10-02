@@ -25,6 +25,11 @@ app.include_router(emis.router, prefix="/api/emis")
 app.include_router(ai.router, prefix="/api/ai")
 app.include_router(profile.router, prefix="/api/profile")
 
+@app.get("/")
+@app.head("/")
+def read_root():
+    return {"status": "ok", "message": "FinanceAssist API is running"}
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "environment": settings.APP_ENV}
