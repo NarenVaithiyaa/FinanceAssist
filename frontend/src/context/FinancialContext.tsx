@@ -180,10 +180,7 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
           ? currentBalance + transactionData.amount 
           : currentBalance - transactionData.amount;
         
-        const rawUpdated = await updateBalances({ 
-          bank: type === 'bank' ? newBalance : (balances?.bank || 0),
-          wallet: type === 'wallet' ? newBalance : (balances?.wallet || 0)
-        });
+        const rawUpdated = await updateBalances({ [type]: newBalance });
         const updated = { ...rawUpdated, bank: Number(rawUpdated.bank), wallet: Number(rawUpdated.wallet) };
         setBalances(updated);
       }
@@ -210,10 +207,7 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
           ? currentBalance - tToDelete.amount
           : currentBalance + tToDelete.amount;
 
-        const rawUpdated = await updateBalances({ 
-          bank: type === 'bank' ? newBalance : (balances?.bank || 0),
-          wallet: type === 'wallet' ? newBalance : (balances?.wallet || 0)
-        });
+        const rawUpdated = await updateBalances({ [type]: newBalance });
         const updated = { ...rawUpdated, bank: Number(rawUpdated.bank), wallet: Number(rawUpdated.wallet) };
         setBalances(updated);
       }
@@ -226,10 +220,7 @@ export const FinancialProvider = ({ children }: { children: ReactNode }) => {
 
   const updateBalance = async (type: "bank" | "wallet", amount: number) => {
     try {
-      const rawUpdated = await updateBalances({ 
-        bank: type === 'bank' ? amount : (balances?.bank || 0),
-        wallet: type === 'wallet' ? amount : (balances?.wallet || 0)
-      });
+      const rawUpdated = await updateBalances({ [type]: amount });
       const updated = { ...rawUpdated, bank: Number(rawUpdated.bank), wallet: Number(rawUpdated.wallet) };
       setBalances(updated);
       toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} balance updated`);
